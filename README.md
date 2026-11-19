@@ -6,9 +6,13 @@ Simulate the spatial pattern seen from above a whole chicken egg in transmission
 
 > **Status: v0.1 research prototype — not a quantitatively validated imaging model.** The core is physically motivated 3D Monte Carlo code compiled by **Numba**, with tested geometry, Fresnel/Snell interfaces, exponential free paths, HG scattering and absorption. It is **not** a wrapper around the independently validated MCX or PyXOpto engines. Never use it to claim an anatomical structure is visible without comparison to a measured image. Photon count/angles and detector aperture are simplified.
 
+## New: off-centre yolk falsification test (800 nm)
+
+[Report: no-yolk vs central and displaced yolk, with real camera images **without overlays**](reports/yolk_displacement_800nm.md). The code now has `Geometry.include_yolk`, yolk x/y/z offset controls in Streamlit, and a homogeneous-phantom negative control. The prior cyan contours were **ground-truth geometry**, not photon-inferred boundaries. Reproduce with `python scripts/validate_yolk_shift.py --photons 16000 --lines 112 --pixels 128 --seeds 881 882`.
+
 ## Latest simulation comparison (580 / 800 / 1200 nm)
 
-[Critical review and illustrated three-wavelength comparison](reports/illumination_critical_review_580_800_1200.md) — controlled comparison of transverse line collimation, spot and offset illumination, with a broad-backlight reference. The 580 and 1200 nm material properties are **hypothetical absorption-sensitivity scenarios**, not measured spectra. Reproduce with `python scripts/compare_three_wavelengths.py --photons 18000 --lines 112 --pixels 128`.
+[Critical review and illustrated three-wavelength comparison](reports/illumination_critical_review_580_800_1200.md) — four principal illumination geometries, plus a broad-backlight throughput reference, reproducible code and a two-seed Monte Carlo check. **580 and 1200 nm are explicitly hypothetical absorption-sensitivity scenarios, not measured spectral predictions.** Reproduce with `python scripts/compare_three_wavelengths.py --photons 18000 --lines 112 --pixels 128`.
 
 ## Installation (Windows / macOS / Linux, Python 3.11–3.12)
 
@@ -107,7 +111,3 @@ mcx -f scan_000.json -G 1
 This export uses the verified open-source [MCX format](https://github.com/fangq/mcx) (`Domain.Media`, x/y/z uint8 labels in column-major order, `Optode` source, output settings) and creates one JSON input for each scan position. **The generated MCX inputs and voxel maps have been structurally tested, but have not been executed against MCX in this environment**, because the MCX GPU executable was not installed. A full MCX camera image still requires extracting the detected photons' saved exit positions/directions (`SaveDataMask: DPXVW`) and applying a real lens/line-pupil model. MCX `flux` is *not* camera irradiance. The exporter currently uses collimated planar/disk sources and does not reproduce the independent x/y angular divergence sliders.
 
 For accurate shell thickness, reduce voxel size to ≤0.25 mm (at the cost of memory). The fast Numba simulator remains the functioning interactive preview, not a substitute for independent MCX validation.
-
-## Higher-resolution illumination comparison (800 nm)
-
-See the [illustrated eight-configuration Monte Carlo comparison](reports/illumination_comparison_800nm.md) (112 × 128 pixels; spot/line/backlight, collimation, offset, receiver acceptance). Raw reproducible data and full-size figures are included in the downloadable project archive; these are unvalidated research-prototype results.

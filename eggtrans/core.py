@@ -34,6 +34,7 @@ class Geometry:
     blood_z_mm: float = 9.0
     blood_radius_mm: float = 2.3
     include_blood: bool = True
+    include_yolk: bool = True  # explicit negative control: albumen-only interior
 
 
 @dataclass
@@ -75,19 +76,19 @@ def validate(geometry: Geometry, optics: Optics, materials: np.ndarray) -> None:
     r = (a.egg_width_mm / 2, a.egg_length_mm / 2, a.egg_height_mm / 2)
     if min(r) <= a.shell_thickness_mm or a.shell_thickness_mm <= 0:
         raise ValueError('Egg must be larger than shell thickness.')
-    if min(a.yolk_radius_x_mm, a.yolk_radius_y_mm, a.yolk_radius_z_mm) <= 0:
+    if a.include_yolk and min(a.yolk_radius_x_mm, a.yolk_radius_y_mm, a.yolk_radius_z_mm) <= 0:
         raise ValueError('Yolk radii must be positive.')
-    for center, radius, outer in zip(
+    for center, radius, outer in ([] if not a.include_yolk else zip(
         (a.yolk_offset_x_mm, a.yolk_offset_y_mm, a.yolk_offset_z_mm),
         (a.yolk_radius_x_mm, a.yolk_radius_y_mm, a.yolk_radius_z_mm), r
-    ):
+    )):
         if abs(center) + radius >= outer - a.shell_thickness_mm:
             raise ValueError('Yolk is not enclosed by the inner shell. Adjust dimensions.')
     if a.include_blood:
         pos = np.array([a.blood_x_mm, a.blood_y_mm, a.blood_z_mm])
         if np.sum((pos / (np.array(r) - a.shell_thickness_mm)) ** 2) >= 0.9:
             raise ValueError('Blood spot must lie inside the shell with a margin.')
-        if np.sum(((pos - np.array([a.yolk_offset_x_mm, a.yolk_offset_y_mm, a.yolk_offset_z_mm])) /
+        if a.include_yolk and np.sum(((pos - np.array([a.yolk_offset_x_mm, a.yolk_offset_y_mm, a.yolk_offset_z_mm])) /
                    np.array([a.yolk_radius_x_mm, a.yolk_radius_y_mm, a.yolk_radius_z_mm])) ** 2) <= 1:
             raise ValueError('Blood spot center must be outside the yolk in this model.')
     if materials.shape != (5, 4):
@@ -116,7 +117,7 @@ def _geometry_vector(g: Geometry) -> np.ndarray:
         g.shell_thickness_mm, g.yolk_radius_x_mm, g.yolk_radius_y_mm,
         g.yolk_radius_z_mm, g.yolk_offset_x_mm, g.yolk_offset_y_mm,
         g.yolk_offset_z_mm, g.blood_x_mm, g.blood_y_mm, g.blood_z_mm,
-        g.blood_radius_mm, float(g.include_blood)
+        g.blood_radius_mm, float(g.include_blood), float(g.include_yolk)
     ], dtype=np.float64)
 
 
@@ -133,7 +134,7 @@ def _medium(x, y, z, q):
         return 1
     if q[14] > 0.5 and _inside(x,y,z,q[10],q[11],q[12],q[13],q[13],q[13]):
         return 4
-    if _inside(x,y,z,q[7],q[8],q[9],q[4],q[5],q[6]):
+    if q[15] > 0.5 and _inside(x,y,z,q[7],q[8],q[9],q[4],q[5],q[6]):
         return 3
     return 2
 
@@ -161,7 +162,7 @@ def _next_boundary(x,y,z,dx,dy,dz,q):
     dist = 1.e30
     boundary = -1
     for k in range(4):
-        if k == 3 and q[14] <= 0.5:
+        if (k == 3 and q[14] <= 0.5) or (k == 2 and q[15] <= 0.5):
             continue
         if k == 0:
             cx,cy,cz,rx,ry,rz = 0.,0.,0.,q[0],q[1],q[2]
@@ -218,6 +219,10 @@ def _hg_direction(dx,dy,dz,g):
 
 @njit(cache=True)
 def _refract_or_reflect(dx,dy,dz,nx,ny,nz,n1,n2):
+    # A zero-contrast internal boundary must not consume random numbers or
+    # introduce artificial optical effects in negative-control experiments.
+    if abs(n1-n2) < 1.e-12:
+        return dx,dy,dz,True
     # Orient surface normal along the incoming direction (towards medium 2).
     ci = dx*nx+dy*ny+dz*nz
     if ci < 0.:
@@ -362,6 +367,6 @@ def projected_masks(g: Geometry, x: np.ndarray, y: np.ndarray) -> dict[str, np.n
     """Perfect geometric top projections, NOT predicted optical visibility."""
     xx,yy=np.meshgrid(x,y)
     return {'egg':(xx/(g.egg_width_mm/2))**2+(yy/(g.egg_length_mm/2))**2<=1,
-            'yolk':((xx-g.yolk_offset_x_mm)/g.yolk_radius_x_mm)**2+
-                   ((yy-g.yolk_offset_y_mm)/g.yolk_radius_y_mm)**2<=1,
+            'yolk':(g.include_yolk & (((xx-g.yolk_offset_x_mm)/g.yolk_radius_x_mm)**2+
+                   ((yy-g.yolk_offset_y_mm)/g.yolk_radius_y_mm)**2<=1)),
             'blood':((xx-g.blood_x_mm)**2+(yy-g.blood_y_mm)**2<=g.blood_radius_mm**2)}

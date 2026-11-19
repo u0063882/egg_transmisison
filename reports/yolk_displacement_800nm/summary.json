@@ -1,0 +1,385 @@
+{
+  "wavelength_nm": 800,
+  "optical_parameters": [
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    [
+      0.04,
+      2.0,
+      0.85,
+      1.53
+    ],
+    [
+      0.006,
+      0.069,
+      0.9,
+      1.35
+    ],
+    [
+      0.014,
+      5.35,
+      0.92,
+      1.4
+    ],
+    [
+      0.7,
+      1.0,
+      0.9,
+      1.35
+    ]
+  ],
+  "reference": "published coefficients only for albumen/yolk at 800 nm; shell hypothetical",
+  "geometry": {
+    "egg_width_mm": 44.0,
+    "egg_length_mm": 59.0,
+    "egg_height_mm": 44.0,
+    "shell_thickness_mm": 0.35,
+    "yolk_radius_x_mm": 14.0,
+    "yolk_radius_y_mm": 16.0,
+    "yolk_radius_z_mm": 14.0,
+    "yolk_offset_x_mm": 0.0,
+    "yolk_offset_y_mm": 0.0,
+    "yolk_offset_z_mm": -1.0,
+    "blood_x_mm": 6.0,
+    "blood_y_mm": 13.0,
+    "blood_z_mm": 9.0,
+    "blood_radius_mm": 2.3,
+    "include_blood": false,
+    "include_yolk": true
+  },
+  "optics": {
+    "mode": "Transverse line",
+    "line_length_mm": 48.0,
+    "line_width_mm": 2.0,
+    "spot_diameter_mm": 6.0,
+    "source_offset_y_mm": 0.0,
+    "source_gap_mm": 2.0,
+    "divergence_x_deg": 8.0,
+    "divergence_y_deg": 3.0,
+    "camera_half_angle_deg": 40.0,
+    "camera_line_width_mm": 4.0,
+    "camera_plane_gap_mm": 1.0,
+    "photons_per_line": 16000,
+    "scan_lines": 112,
+    "camera_pixels": 128,
+    "max_scattering_events": 900,
+    "seed": 42
+  },
+  "photons_per_line": 16000,
+  "scan_lines": 112,
+  "camera_pixels": 128,
+  "seeds": [
+    881,
+    882
+  ],
+  "scenarios": {
+    "line/none": {
+      "geometry": {
+        "egg_width_mm": 44.0,
+        "egg_length_mm": 59.0,
+        "egg_height_mm": 44.0,
+        "shell_thickness_mm": 0.35,
+        "yolk_radius_x_mm": 14.0,
+        "yolk_radius_y_mm": 16.0,
+        "yolk_radius_z_mm": 14.0,
+        "yolk_offset_x_mm": 0.0,
+        "yolk_offset_y_mm": 0.0,
+        "yolk_offset_z_mm": -1.0,
+        "blood_x_mm": 6.0,
+        "blood_y_mm": 13.0,
+        "blood_z_mm": 9.0,
+        "blood_radius_mm": 2.3,
+        "include_blood": false,
+        "include_yolk": false
+      },
+      "total_flux_mean": 3.0802838535726877,
+      "detected_ray_count_per_seed": [
+        64398,
+        64473
+      ],
+      "event_limit_terminations_per_seed": [
+        0,
+        0
+      ]
+    },
+    "line/center": {
+      "geometry": {
+        "egg_width_mm": 44.0,
+        "egg_length_mm": 59.0,
+        "egg_height_mm": 44.0,
+        "shell_thickness_mm": 0.35,
+        "yolk_radius_x_mm": 14.0,
+        "yolk_radius_y_mm": 16.0,
+        "yolk_radius_z_mm": 14.0,
+        "yolk_offset_x_mm": 0,
+        "yolk_offset_y_mm": 0,
+        "yolk_offset_z_mm": -1.0,
+        "blood_x_mm": 6.0,
+        "blood_y_mm": 13.0,
+        "blood_z_mm": 9.0,
+        "blood_radius_mm": 2.3,
+        "include_blood": false,
+        "include_yolk": true
+      },
+      "total_flux_mean": 1.0405910047099423,
+      "detected_ray_count_per_seed": [
+        22677,
+        22617
+      ],
+      "event_limit_terminations_per_seed": [
+        3937,
+        3943
+      ]
+    },
+    "line/left": {
+      "geometry": {
+        "egg_width_mm": 44.0,
+        "egg_length_mm": 59.0,
+        "egg_height_mm": 44.0,
+        "shell_thickness_mm": 0.35,
+        "yolk_radius_x_mm": 14.0,
+        "yolk_radius_y_mm": 16.0,
+        "yolk_radius_z_mm": 14.0,
+        "yolk_offset_x_mm": -5,
+        "yolk_offset_y_mm": -7,
+        "yolk_offset_z_mm": -1.0,
+        "blood_x_mm": 6.0,
+        "blood_y_mm": 13.0,
+        "blood_z_mm": 9.0,
+        "blood_radius_mm": 2.3,
+        "include_blood": false,
+        "include_yolk": true
+      },
+      "total_flux_mean": 1.446245074604101,
+      "detected_ray_count_per_seed": [
+        31315,
+        30997
+      ],
+      "event_limit_terminations_per_seed": [
+        4628,
+        4490
+      ]
+    },
+    "line/right": {
+      "geometry": {
+        "egg_width_mm": 44.0,
+        "egg_length_mm": 59.0,
+        "egg_height_mm": 44.0,
+        "shell_thickness_mm": 0.35,
+        "yolk_radius_x_mm": 14.0,
+        "yolk_radius_y_mm": 16.0,
+        "yolk_radius_z_mm": 14.0,
+        "yolk_offset_x_mm": 5,
+        "yolk_offset_y_mm": -7,
+        "yolk_offset_z_mm": -1.0,
+        "blood_x_mm": 6.0,
+        "blood_y_mm": 13.0,
+        "blood_z_mm": 9.0,
+        "blood_radius_mm": 2.3,
+        "include_blood": false,
+        "include_yolk": true
+      },
+      "total_flux_mean": 1.4461554303439348,
+      "detected_ray_count_per_seed": [
+        30943,
+        31471
+      ],
+      "event_limit_terminations_per_seed": [
+        4525,
+        4649
+      ]
+    },
+    "spot/none": {
+      "geometry": {
+        "egg_width_mm": 44.0,
+        "egg_length_mm": 59.0,
+        "egg_height_mm": 44.0,
+        "shell_thickness_mm": 0.35,
+        "yolk_radius_x_mm": 14.0,
+        "yolk_radius_y_mm": 16.0,
+        "yolk_radius_z_mm": 14.0,
+        "yolk_offset_x_mm": 0.0,
+        "yolk_offset_y_mm": 0.0,
+        "yolk_offset_z_mm": -1.0,
+        "blood_x_mm": 6.0,
+        "blood_y_mm": 13.0,
+        "blood_z_mm": 9.0,
+        "blood_radius_mm": 2.3,
+        "include_blood": false,
+        "include_yolk": false
+      },
+      "total_flux_mean": 4.512497459009719,
+      "detected_ray_count_per_seed": [
+        95197,
+        94910
+      ],
+      "event_limit_terminations_per_seed": [
+        0,
+        0
+      ]
+    },
+    "spot/center": {
+      "geometry": {
+        "egg_width_mm": 44.0,
+        "egg_length_mm": 59.0,
+        "egg_height_mm": 44.0,
+        "shell_thickness_mm": 0.35,
+        "yolk_radius_x_mm": 14.0,
+        "yolk_radius_y_mm": 16.0,
+        "yolk_radius_z_mm": 14.0,
+        "yolk_offset_x_mm": 0,
+        "yolk_offset_y_mm": 0,
+        "yolk_offset_z_mm": -1.0,
+        "blood_x_mm": 6.0,
+        "blood_y_mm": 13.0,
+        "blood_z_mm": 9.0,
+        "blood_radius_mm": 2.3,
+        "include_blood": false,
+        "include_yolk": true
+      },
+      "total_flux_mean": 1.166200751798804,
+      "detected_ray_count_per_seed": [
+        25546,
+        26001
+      ],
+      "event_limit_terminations_per_seed": [
+        6391,
+        6283
+      ]
+    },
+    "spot/left": {
+      "geometry": {
+        "egg_width_mm": 44.0,
+        "egg_length_mm": 59.0,
+        "egg_height_mm": 44.0,
+        "shell_thickness_mm": 0.35,
+        "yolk_radius_x_mm": 14.0,
+        "yolk_radius_y_mm": 16.0,
+        "yolk_radius_z_mm": 14.0,
+        "yolk_offset_x_mm": -5,
+        "yolk_offset_y_mm": -7,
+        "yolk_offset_z_mm": -1.0,
+        "blood_x_mm": 6.0,
+        "blood_y_mm": 13.0,
+        "blood_z_mm": 9.0,
+        "blood_radius_mm": 2.3,
+        "include_blood": false,
+        "include_yolk": true
+      },
+      "total_flux_mean": 1.6419791263566659,
+      "detected_ray_count_per_seed": [
+        35621,
+        36004
+      ],
+      "event_limit_terminations_per_seed": [
+        6718,
+        6645
+      ]
+    },
+    "spot/right": {
+      "geometry": {
+        "egg_width_mm": 44.0,
+        "egg_length_mm": 59.0,
+        "egg_height_mm": 44.0,
+        "shell_thickness_mm": 0.35,
+        "yolk_radius_x_mm": 14.0,
+        "yolk_radius_y_mm": 16.0,
+        "yolk_radius_z_mm": 14.0,
+        "yolk_offset_x_mm": 5,
+        "yolk_offset_y_mm": -7,
+        "yolk_offset_z_mm": -1.0,
+        "blood_x_mm": 6.0,
+        "blood_y_mm": 13.0,
+        "blood_z_mm": 9.0,
+        "blood_radius_mm": 2.3,
+        "include_blood": false,
+        "include_yolk": true
+      },
+      "total_flux_mean": 1.6387073926877058,
+      "detected_ray_count_per_seed": [
+        35711,
+        35789
+      ],
+      "event_limit_terminations_per_seed": [
+        6761,
+        6906
+      ]
+    }
+  },
+  "metrics": {
+    "line/center": {
+      "positive_effect_centroid": {
+        "x_mm": -0.004066114850424745,
+        "y_mm": 0.03733278525625932,
+        "integrated_loss": 2.0812991774782974
+      },
+      "signed_integrated_change": 2.039692848862746,
+      "fraction_flux_drop_vs_no_yolk": 0.6621769115521593
+    },
+    "line/left": {
+      "positive_effect_centroid": {
+        "x_mm": -2.3106470605871015,
+        "y_mm": -4.101386770714034,
+        "integrated_loss": 1.6817243189827444
+      },
+      "signed_integrated_change": 1.634038778968587,
+      "fraction_flux_drop_vs_no_yolk": 0.5304831816305943
+    },
+    "line/right": {
+      "positive_effect_centroid": {
+        "x_mm": 2.2416173700899953,
+        "y_mm": -4.08142227581074,
+        "integrated_loss": 1.680534372110419
+      },
+      "signed_integrated_change": 1.6341284232287536,
+      "fraction_flux_drop_vs_no_yolk": 0.5305122842277665
+    },
+    "line/mirror_test": {
+      "corr_reflected_differential": 0.9950702594408806
+    },
+    "spot/center": {
+      "positive_effect_centroid": {
+        "x_mm": 0.0433504731560586,
+        "y_mm": 0.022177392267729697,
+        "integrated_loss": 3.4076476767879664
+      },
+      "signed_integrated_change": 3.3462967072109144,
+      "fraction_flux_drop_vs_no_yolk": 0.7415620147396758
+    },
+    "spot/left": {
+      "positive_effect_centroid": {
+        "x_mm": -0.7736765602176382,
+        "y_mm": -4.721478212196548,
+        "integrated_loss": 2.9429419951346083
+      },
+      "signed_integrated_change": 2.870518332653053,
+      "fraction_flux_drop_vs_no_yolk": 0.6361263044972433
+    },
+    "spot/right": {
+      "positive_effect_centroid": {
+        "x_mm": 0.8643632516223863,
+        "y_mm": -4.6774270848934,
+        "integrated_loss": 2.9523518711885286
+      },
+      "signed_integrated_change": 2.873790066322013,
+      "fraction_flux_drop_vs_no_yolk": 0.6368513428376921
+    },
+    "spot/mirror_test": {
+      "corr_reflected_differential": 0.9975821132142692
+    }
+  },
+  "sources": {
+    "line": [
+      "Transverse line",
+      "Transverse line"
+    ],
+    "spot": [
+      "6 mm spot",
+      "Spot"
+    ]
+  }
+}

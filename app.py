@@ -52,6 +52,11 @@ with st.expander('Egg geometry / artificial defect', expanded=False):
     yolk_x=c1.slider('Yolk x radius (mm)', 5., 20., 14., .5)
     yolk_y=c2.slider('Yolk y radius (mm)', 5., 25., 16., .5)
     yolk_z=c3.slider('Yolk z radius (mm)', 5., 20., 14., .5)
+    include_yolk=st.checkbox('Include yolk (uncheck for negative control)', value=True)
+    yc1,yc2,yc3=st.columns(3)
+    yolk_dx=yc1.slider('Yolk x offset (mm)', -8., 8., -1.5, .5)
+    yolk_dy=yc2.slider('Yolk y offset (mm)', -12., 12., 0., .5)
+    yolk_dz=yc3.slider('Yolk z offset (mm)', -6., 6., -1., .5)
     blood=st.checkbox('Include artificial blood spot', value=True)
     d1,d2,d3,d4=st.columns(4)
     blood_x=d1.number_input('Blood x (mm)', -15., 15., 6., 1.)
@@ -61,6 +66,8 @@ with st.expander('Egg geometry / artificial defect', expanded=False):
 
 g=Geometry(egg_width_mm=egg_w,egg_length_mm=egg_l,egg_height_mm=egg_h,shell_thickness_mm=shell,
            yolk_radius_x_mm=yolk_x,yolk_radius_y_mm=yolk_y,yolk_radius_z_mm=yolk_z,
+           yolk_offset_x_mm=yolk_dx,yolk_offset_y_mm=yolk_dy,yolk_offset_z_mm=yolk_dz,
+           include_yolk=include_yolk,
            blood_x_mm=blood_x,blood_y_mm=blood_y,blood_z_mm=blood_z,blood_radius_mm=blood_radius,include_blood=blood)
 o=Optics(mode=mode,line_length_mm=length,line_width_mm=width,spot_diameter_mm=diameter,
          source_offset_y_mm=offset,source_gap_mm=gap,divergence_x_deg=div_x,divergence_y_deg=div_y,
@@ -101,6 +108,7 @@ with c_compare:
 with c_vis:
     display_mode=st.radio('Display', ['Raw signal', 'Asinh visibility', 'Log10 visibility'],horizontal=True,
         help='Nonlinear displays help visualize low signal but do NOT recover lost spatial information.')
+show_truth=st.checkbox('Also show geometric ground truth (NOT detected by camera)',value=False)
 
 
 def make_heatmap(arr, x, y, title, common_max=None):
@@ -141,13 +149,16 @@ if 'scan_result' in st.session_state:
     dx=result['x_mm'];dy=result['scan_y_mm']; image=result['image']
     mask=projected_masks(Geometry(**result['geometry']),dx,dy)
     st.markdown(f'### Simulated camera scan — {st.session_state["scan_wavelength"]} nm')
-    a,b=st.columns(2)
-    a.plotly_chart(make_heatmap(shown(image),dx,dy,'Detected transmission (Monte Carlo)'),use_container_width=True)
-    reference=np.zeros_like(image)
-    reference[mask['egg']]=1
-    reference[mask['yolk']]=2
-    if result['geometry']['include_blood']: reference[mask['blood']]=3
-    b.plotly_chart(make_heatmap(reference,dx,dy,'True geometric projections (not observable ground truth)'),use_container_width=True)
+    if show_truth:
+        a,b=st.columns(2)
+        a.plotly_chart(make_heatmap(shown(image),dx,dy,'Detected transmission (Monte Carlo)'),use_container_width=True)
+        reference=np.zeros_like(image)
+        reference[mask['egg']]=1
+        if result['geometry'].get('include_yolk', True): reference[mask['yolk']]=2
+        if result['geometry']['include_blood']: reference[mask['blood']]=3
+        b.plotly_chart(make_heatmap(reference,dx,dy,'Known geometry (NOT detected by camera)'),use_container_width=True)
+    else:
+        st.plotly_chart(make_heatmap(shown(image),dx,dy,'Detected transmission ONLY (no true contours)'),use_container_width=True)
     di=result['diagnostics']
     c1,c2,c3,c4=st.columns(4)
     c1.metric('Launched packets',f'{di["launched_photons"]:,}')
@@ -191,6 +202,7 @@ with st.expander('Model assumptions / limitations'):
 - Geometries are ideal **nested ellipsoids/spherical blood inclusion**, not reconstructed anatomy. Shell thickness is only approximately uniform for an ellipsoid.
 - Camera is an **ideal angularly-gated top-plane line receiver**, not the exact spectral line camera lens/pupil. Refraction, dynamic yolk position, birefringence, shell pores, polarization and heterogeneity beyond four materials are simplified.
 - 150 W lamp power does not determine ray direction, and **lamp wattage is not calibrated into absolute spectral irradiance**. Angular divergence is a tunable proxy for your SCHOTT cylindrical optic.
+- To falsify spurious yolk images, disable **Include yolk**; the model then removes its internal volume rather than drawing a dark shape. Ground-truth display is optional and off by default.
 - No real data validation has been performed; compare simulated vs measured line profiles and source beam profiles before drawing quantitative conclusions.
 - The initial preview can be noisy at realistic small camera acceptance angles. Higher-fidelity research should eventually employ validated packages such as MCX or PyXOpto with measured egg-property spectra and a calibrated receiver model.
 ''')
