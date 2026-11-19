@@ -103,8 +103,8 @@ with c_vis:
         help='Nonlinear displays help visualize low signal but do NOT recover lost spatial information.')
 
 
-def make_heatmap(arr, x, y, title):
-    fig=go.Figure(go.Heatmap(z=arr,x=x,y=y,colorscale='Inferno',colorbar={'title':'Relative'}))
+def make_heatmap(arr, x, y, title, common_max=None):
+    fig=go.Figure(go.Heatmap(z=arr,x=x,y=y,colorscale='Inferno',zmin=0,zmax=common_max,colorbar={'title':'Relative'}))
     fig.update_layout(title=title,xaxis_title='Across egg x (mm)',yaxis_title='Translation y (mm)',
         height=500,margin=dict(l=40,r=40,t=55,b=40),yaxis={'scaleanchor':'x','scaleratio':1})
     return fig
@@ -176,10 +176,11 @@ if 'scan_result' in st.session_state:
     if comparisons:
         st.subheader('Comparison — equal photon packets launched per scan line')
         cols=st.columns(2)
+        common_max=max(float(np.max(shown(rr['image']))) for rr in comparisons.values())
         for idx,name in enumerate(MODE_NAMES):
             rr=comparisons[name]
             with cols[idx%2]:
-                st.plotly_chart(make_heatmap(shown(rr['image']),rr['x_mm'],rr['scan_y_mm'],name),use_container_width=True)
+                st.plotly_chart(make_heatmap(shown(rr['image']),rr['x_mm'],rr['scan_y_mm'],name,common_max=common_max),use_container_width=True)
         st.info('Source brightness is normalized per emitted photon. For a physically equal W/mm² comparison, calibrate each illuminator’s radiant output and spectral distribution; broader sources have different emitting areas.')
 else:
     st.info('Choose a source and press **Run scan**. Suggested first run: 800 nm transverse line, 8,000 packets × 40 lines.')

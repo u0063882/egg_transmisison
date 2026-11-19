@@ -89,3 +89,17 @@ Performance tips:
 - `app.py`: interactive Streamlit viewer
 - `eggtrans/cli.py`: batch runs and PNG/SVG/NPZ output
 - `tests/`: smoke, geometry, reproducibility, spectral import tests
+
+## Optional export for validated MCX photon transport
+
+An **independent cross-check** can be prepared as MCX-compatible voxel labels and JSON inputs with:
+
+```bash
+python -m eggtrans.mcx_export --output results/mcx_case --voxel-mm 0.5 --scan-lines 24 --mode "Transverse line" --photons 10000000
+cd results/mcx_case
+mcx -f scan_000.json -G 1
+```
+
+This export uses the verified open-source [MCX format](https://github.com/fangq/mcx) (`Domain.Media`, x/y/z uint8 labels in column-major order, `Optode` source, output settings) and creates one JSON input for each scan position. **The generated MCX inputs and voxel maps have been structurally tested, but have not been executed against MCX in this environment**, because the MCX GPU executable was not installed. A full MCX camera image still requires extracting the detected photons' saved exit positions/directions (`SaveDataMask: DPXVW`) and applying a real lens/line-pupil model. MCX `flux` is *not* camera irradiance. The exporter currently uses collimated planar/disk sources and does not reproduce the independent x/y angular divergence sliders.
+
+For accurate shell thickness, reduce voxel size to ≤0.25 mm (at the cost of memory). The fast Numba simulator remains the functioning interactive preview, not a substitute for independent MCX validation.
