@@ -103,3 +103,7 @@ mcx -f scan_000.json -G 1
 This export uses the verified open-source [MCX format](https://github.com/fangq/mcx) (`Domain.Media`, x/y/z uint8 labels in column-major order, `Optode` source, output settings) and creates one JSON input for each scan position. **The generated MCX inputs and voxel maps have been structurally tested, but have not been executed against MCX in this environment**, because the MCX GPU executable was not installed. A full MCX camera image still requires extracting the detected photons' saved exit positions/directions (`SaveDataMask: DPXVW`) and applying a real lens/line-pupil model. MCX `flux` is *not* camera irradiance. The exporter currently uses collimated planar/disk sources and does not reproduce the independent x/y angular divergence sliders.
 
 For accurate shell thickness, reduce voxel size to ≤0.25 mm (at the cost of memory). The fast Numba simulator remains the functioning interactive preview, not a substitute for independent MCX validation.
+
+## Higher-resolution illumination comparison (800 nm)
+
+See the [illustrated eight-configuration Monte Carlo comparison](reports/illumination_comparison_800nm.md) (112 × 128 pixels; spot/line/backlight, collimation, offset, receiver acceptance). Raw reproducible data and full-size figures are included in the downloadable project archive; these are unvalidated research-prototype results.
