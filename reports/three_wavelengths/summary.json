@@ -1,0 +1,584 @@
+{
+  "status": "unvalidated; illustrative absorption scenarios at 580 and 1200 nm",
+  "model": "custom Numba Monte Carlo (not independently benchmarked)",
+  "photons_per_line": 18000,
+  "scan_lines": 112,
+  "camera_pixels": 128,
+  "seeds": [
+    711
+  ],
+  "baseline_materials_800": [
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    [
+      0.04,
+      2.0,
+      0.85,
+      1.53
+    ],
+    [
+      0.006,
+      0.069,
+      0.9,
+      1.35
+    ],
+    [
+      0.014,
+      5.35,
+      0.92,
+      1.4
+    ],
+    [
+      0.7,
+      1.0,
+      0.9,
+      1.35
+    ]
+  ],
+  "absorption_multipliers": {
+    "580": {
+      "Shell": 1.25,
+      "Albumen": 1.0,
+      "Yolk": 1.8,
+      "Blood spot": 4.0
+    },
+    "800": {
+      "Shell": 1.0,
+      "Albumen": 1.0,
+      "Yolk": 1.0,
+      "Blood spot": 1.0
+    },
+    "1200": {
+      "Shell": 1.2,
+      "Albumen": 5.0,
+      "Yolk": 4.0,
+      "Blood spot": 0.9
+    }
+  },
+  "scenario_materials": {
+    "580": [
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      [
+        0.05,
+        2.0,
+        0.85,
+        1.53
+      ],
+      [
+        0.006,
+        0.069,
+        0.9,
+        1.35
+      ],
+      [
+        0.0252,
+        5.35,
+        0.92,
+        1.4
+      ],
+      [
+        2.8,
+        1.0,
+        0.9,
+        1.35
+      ]
+    ],
+    "800": [
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      [
+        0.04,
+        2.0,
+        0.85,
+        1.53
+      ],
+      [
+        0.006,
+        0.069,
+        0.9,
+        1.35
+      ],
+      [
+        0.014,
+        5.35,
+        0.92,
+        1.4
+      ],
+      [
+        0.7,
+        1.0,
+        0.9,
+        1.35
+      ]
+    ],
+    "1200": [
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      [
+        0.048,
+        2.0,
+        0.85,
+        1.53
+      ],
+      [
+        0.03,
+        0.069,
+        0.9,
+        1.35
+      ],
+      [
+        0.056,
+        5.35,
+        0.92,
+        1.4
+      ],
+      [
+        0.63,
+        1.0,
+        0.9,
+        1.35
+      ]
+    ]
+  },
+  "geometry": {
+    "egg_width_mm": 44.0,
+    "egg_length_mm": 59.0,
+    "egg_height_mm": 44.0,
+    "shell_thickness_mm": 0.35,
+    "yolk_radius_x_mm": 14.0,
+    "yolk_radius_y_mm": 16.0,
+    "yolk_radius_z_mm": 14.0,
+    "yolk_offset_x_mm": -1.5,
+    "yolk_offset_y_mm": 0.0,
+    "yolk_offset_z_mm": -1.0,
+    "blood_x_mm": 6.0,
+    "blood_y_mm": 13.0,
+    "blood_z_mm": 9.0,
+    "blood_radius_mm": 2.3,
+    "include_blood": true
+  },
+  "runs": [
+    {
+      "wavelength_nm": 580,
+      "config": "line",
+      "label": "Transverse line",
+      "optics": {
+        "mode": "Transverse line",
+        "line_length_mm": 48.0,
+        "line_width_mm": 2.0,
+        "spot_diameter_mm": 6.0,
+        "source_offset_y_mm": 0.0,
+        "source_gap_mm": 2.0,
+        "divergence_x_deg": 8.0,
+        "divergence_y_deg": 3.0,
+        "camera_half_angle_deg": 40.0,
+        "camera_line_width_mm": 4.0,
+        "camera_plane_gap_mm": 1.0,
+        "photons_per_line": 18000,
+        "scan_lines": 112,
+        "camera_pixels": 128,
+        "max_scattering_events": 900,
+        "seed": 711
+      },
+      "detected_rays": 26551,
+      "relative_detected_flux_pct": 0.9175563252981411,
+      "zero_volume_scatter_share_pct": 1.6212925203365876,
+      "event_limit_termination_pct": 0.22901785714285713
+    },
+    {
+      "wavelength_nm": 580,
+      "config": "collimated",
+      "label": "Same line, 1\u00b0 divergence",
+      "optics": {
+        "mode": "Transverse line",
+        "line_length_mm": 48.0,
+        "line_width_mm": 2.0,
+        "spot_diameter_mm": 6.0,
+        "source_offset_y_mm": 0.0,
+        "source_gap_mm": 2.0,
+        "divergence_x_deg": 1.0,
+        "divergence_y_deg": 1.0,
+        "camera_half_angle_deg": 40.0,
+        "camera_line_width_mm": 4.0,
+        "camera_plane_gap_mm": 1.0,
+        "photons_per_line": 18000,
+        "scan_lines": 112,
+        "camera_pixels": 128,
+        "max_scattering_events": 900,
+        "seed": 711
+      },
+      "detected_rays": 26168,
+      "relative_detected_flux_pct": 0.9061197772553908,
+      "zero_volume_scatter_share_pct": 1.6019722797515419,
+      "event_limit_termination_pct": 0.22415674603174604
+    },
+    {
+      "wavelength_nm": 580,
+      "config": "spot",
+      "label": "6 mm spot",
+      "optics": {
+        "mode": "Spot",
+        "line_length_mm": 48.0,
+        "line_width_mm": 2.0,
+        "spot_diameter_mm": 6.0,
+        "source_offset_y_mm": 0.0,
+        "source_gap_mm": 2.0,
+        "divergence_x_deg": 8.0,
+        "divergence_y_deg": 3.0,
+        "camera_half_angle_deg": 40.0,
+        "camera_line_width_mm": 4.0,
+        "camera_plane_gap_mm": 1.0,
+        "photons_per_line": 18000,
+        "scan_lines": 112,
+        "camera_pixels": 128,
+        "max_scattering_events": 900,
+        "seed": 711
+      },
+      "detected_rays": 29285,
+      "relative_detected_flux_pct": 1.0073310242869347,
+      "zero_volume_scatter_share_pct": 0.26176131344437403,
+      "event_limit_termination_pct": 0.34851190476190474
+    },
+    {
+      "wavelength_nm": 580,
+      "config": "offset",
+      "label": "Line offset +5 mm",
+      "optics": {
+        "mode": "Transverse line",
+        "line_length_mm": 48.0,
+        "line_width_mm": 2.0,
+        "spot_diameter_mm": 6.0,
+        "source_offset_y_mm": 5.0,
+        "source_gap_mm": 2.0,
+        "divergence_x_deg": 8.0,
+        "divergence_y_deg": 3.0,
+        "camera_half_angle_deg": 40.0,
+        "camera_line_width_mm": 4.0,
+        "camera_plane_gap_mm": 1.0,
+        "photons_per_line": 18000,
+        "scan_lines": 112,
+        "camera_pixels": 128,
+        "max_scattering_events": 900,
+        "seed": 711
+      },
+      "detected_rays": 25705,
+      "relative_detected_flux_pct": 0.8818917005959914,
+      "zero_volume_scatter_share_pct": 3.308023978540668,
+      "event_limit_termination_pct": 0.22023809523809523
+    },
+    {
+      "wavelength_nm": 580,
+      "config": "broad",
+      "label": "72 mm backlight",
+      "optics": {
+        "mode": "Broad backlight",
+        "line_length_mm": 72.0,
+        "line_width_mm": 2.0,
+        "spot_diameter_mm": 6.0,
+        "source_offset_y_mm": 0.0,
+        "source_gap_mm": 2.0,
+        "divergence_x_deg": 8.0,
+        "divergence_y_deg": 3.0,
+        "camera_half_angle_deg": 40.0,
+        "camera_line_width_mm": 4.0,
+        "camera_plane_gap_mm": 1.0,
+        "photons_per_line": 18000,
+        "scan_lines": 112,
+        "camera_pixels": 128,
+        "max_scattering_events": 900,
+        "seed": 711
+      },
+      "detected_rays": 7305,
+      "relative_detected_flux_pct": 0.23546488050151343,
+      "zero_volume_scatter_share_pct": 2.5624384948077172,
+      "event_limit_termination_pct": 0.12123015873015873
+    },
+    {
+      "wavelength_nm": 800,
+      "config": "line",
+      "label": "Transverse line",
+      "optics": {
+        "mode": "Transverse line",
+        "line_length_mm": 48.0,
+        "line_width_mm": 2.0,
+        "spot_diameter_mm": 6.0,
+        "source_offset_y_mm": 0.0,
+        "source_gap_mm": 2.0,
+        "divergence_x_deg": 8.0,
+        "divergence_y_deg": 3.0,
+        "camera_half_angle_deg": 40.0,
+        "camera_line_width_mm": 4.0,
+        "camera_plane_gap_mm": 1.0,
+        "photons_per_line": 18000,
+        "scan_lines": 112,
+        "camera_pixels": 128,
+        "max_scattering_events": 900,
+        "seed": 711
+      },
+      "detected_rays": 26584,
+      "relative_detected_flux_pct": 0.953173738224577,
+      "zero_volume_scatter_share_pct": 1.5713965111805674,
+      "event_limit_termination_pct": 0.22996031746031745
+    },
+    {
+      "wavelength_nm": 800,
+      "config": "collimated",
+      "label": "Same line, 1\u00b0 divergence",
+      "optics": {
+        "mode": "Transverse line",
+        "line_length_mm": 48.0,
+        "line_width_mm": 2.0,
+        "spot_diameter_mm": 6.0,
+        "source_offset_y_mm": 0.0,
+        "source_gap_mm": 2.0,
+        "divergence_x_deg": 1.0,
+        "divergence_y_deg": 1.0,
+        "camera_half_angle_deg": 40.0,
+        "camera_line_width_mm": 4.0,
+        "camera_plane_gap_mm": 1.0,
+        "photons_per_line": 18000,
+        "scan_lines": 112,
+        "camera_pixels": 128,
+        "max_scattering_events": 900,
+        "seed": 711
+      },
+      "detected_rays": 26274,
+      "relative_detected_flux_pct": 0.9436904118650583,
+      "zero_volume_scatter_share_pct": 1.4953127418091803,
+      "event_limit_termination_pct": 0.22584325396825397
+    },
+    {
+      "wavelength_nm": 800,
+      "config": "spot",
+      "label": "6 mm spot",
+      "optics": {
+        "mode": "Spot",
+        "line_length_mm": 48.0,
+        "line_width_mm": 2.0,
+        "spot_diameter_mm": 6.0,
+        "source_offset_y_mm": 0.0,
+        "source_gap_mm": 2.0,
+        "divergence_x_deg": 8.0,
+        "divergence_y_deg": 3.0,
+        "camera_half_angle_deg": 40.0,
+        "camera_line_width_mm": 4.0,
+        "camera_plane_gap_mm": 1.0,
+        "photons_per_line": 18000,
+        "scan_lines": 112,
+        "camera_pixels": 128,
+        "max_scattering_events": 900,
+        "seed": 711
+      },
+      "detected_rays": 29363,
+      "relative_detected_flux_pct": 1.0487215638940668,
+      "zero_volume_scatter_share_pct": 0.26160525970662624,
+      "event_limit_termination_pct": 0.34637896825396824
+    },
+    {
+      "wavelength_nm": 800,
+      "config": "offset",
+      "label": "Line offset +5 mm",
+      "optics": {
+        "mode": "Transverse line",
+        "line_length_mm": 48.0,
+        "line_width_mm": 2.0,
+        "spot_diameter_mm": 6.0,
+        "source_offset_y_mm": 5.0,
+        "source_gap_mm": 2.0,
+        "divergence_x_deg": 8.0,
+        "divergence_y_deg": 3.0,
+        "camera_half_angle_deg": 40.0,
+        "camera_line_width_mm": 4.0,
+        "camera_plane_gap_mm": 1.0,
+        "photons_per_line": 18000,
+        "scan_lines": 112,
+        "camera_pixels": 128,
+        "max_scattering_events": 900,
+        "seed": 711
+      },
+      "detected_rays": 25733,
+      "relative_detected_flux_pct": 0.9145955827506995,
+      "zero_volume_scatter_share_pct": 3.16567806193264,
+      "event_limit_termination_pct": 0.22137896825396824
+    },
+    {
+      "wavelength_nm": 800,
+      "config": "broad",
+      "label": "72 mm backlight",
+      "optics": {
+        "mode": "Broad backlight",
+        "line_length_mm": 72.0,
+        "line_width_mm": 2.0,
+        "spot_diameter_mm": 6.0,
+        "source_offset_y_mm": 0.0,
+        "source_gap_mm": 2.0,
+        "divergence_x_deg": 8.0,
+        "divergence_y_deg": 3.0,
+        "camera_half_angle_deg": 40.0,
+        "camera_line_width_mm": 4.0,
+        "camera_plane_gap_mm": 1.0,
+        "photons_per_line": 18000,
+        "scan_lines": 112,
+        "camera_pixels": 128,
+        "max_scattering_events": 900,
+        "seed": 711
+      },
+      "detected_rays": 7355,
+      "relative_detected_flux_pct": 0.2486411459685588,
+      "zero_volume_scatter_share_pct": 2.4766496817513897,
+      "event_limit_termination_pct": 0.12152777777777778
+    },
+    {
+      "wavelength_nm": 1200,
+      "config": "line",
+      "label": "Transverse line",
+      "optics": {
+        "mode": "Transverse line",
+        "line_length_mm": 48.0,
+        "line_width_mm": 2.0,
+        "spot_diameter_mm": 6.0,
+        "source_offset_y_mm": 0.0,
+        "source_gap_mm": 2.0,
+        "divergence_x_deg": 8.0,
+        "divergence_y_deg": 3.0,
+        "camera_half_angle_deg": 40.0,
+        "camera_line_width_mm": 4.0,
+        "camera_plane_gap_mm": 1.0,
+        "photons_per_line": 18000,
+        "scan_lines": 112,
+        "camera_pixels": 128,
+        "max_scattering_events": 900,
+        "seed": 711
+      },
+      "detected_rays": 26587,
+      "relative_detected_flux_pct": 0.4276751907728873,
+      "zero_volume_scatter_share_pct": 1.586890146165918,
+      "event_limit_termination_pct": 0.21592261904761906
+    },
+    {
+      "wavelength_nm": 1200,
+      "config": "collimated",
+      "label": "Same line, 1\u00b0 divergence",
+      "optics": {
+        "mode": "Transverse line",
+        "line_length_mm": 48.0,
+        "line_width_mm": 2.0,
+        "spot_diameter_mm": 6.0,
+        "source_offset_y_mm": 0.0,
+        "source_gap_mm": 2.0,
+        "divergence_x_deg": 1.0,
+        "divergence_y_deg": 1.0,
+        "camera_half_angle_deg": 40.0,
+        "camera_line_width_mm": 4.0,
+        "camera_plane_gap_mm": 1.0,
+        "photons_per_line": 18000,
+        "scan_lines": 112,
+        "camera_pixels": 128,
+        "max_scattering_events": 900,
+        "seed": 711
+      },
+      "detected_rays": 26233,
+      "relative_detected_flux_pct": 0.4230236038613547,
+      "zero_volume_scatter_share_pct": 1.4698814052267255,
+      "event_limit_termination_pct": 0.21155753968253968
+    },
+    {
+      "wavelength_nm": 1200,
+      "config": "spot",
+      "label": "6 mm spot",
+      "optics": {
+        "mode": "Spot",
+        "line_length_mm": 48.0,
+        "line_width_mm": 2.0,
+        "spot_diameter_mm": 6.0,
+        "source_offset_y_mm": 0.0,
+        "source_gap_mm": 2.0,
+        "divergence_x_deg": 8.0,
+        "divergence_y_deg": 3.0,
+        "camera_half_angle_deg": 40.0,
+        "camera_line_width_mm": 4.0,
+        "camera_plane_gap_mm": 1.0,
+        "photons_per_line": 18000,
+        "scan_lines": 112,
+        "camera_pixels": 128,
+        "max_scattering_events": 900,
+        "seed": 711
+      },
+      "detected_rays": 29284,
+      "relative_detected_flux_pct": 0.46262834777005707,
+      "zero_volume_scatter_share_pct": 0.22630136496007255,
+      "event_limit_termination_pct": 0.32767857142857143
+    },
+    {
+      "wavelength_nm": 1200,
+      "config": "offset",
+      "label": "Line offset +5 mm",
+      "optics": {
+        "mode": "Transverse line",
+        "line_length_mm": 48.0,
+        "line_width_mm": 2.0,
+        "spot_diameter_mm": 6.0,
+        "source_offset_y_mm": 5.0,
+        "source_gap_mm": 2.0,
+        "divergence_x_deg": 8.0,
+        "divergence_y_deg": 3.0,
+        "camera_half_angle_deg": 40.0,
+        "camera_line_width_mm": 4.0,
+        "camera_plane_gap_mm": 1.0,
+        "photons_per_line": 18000,
+        "scan_lines": 112,
+        "camera_pixels": 128,
+        "max_scattering_events": 900,
+        "seed": 711
+      },
+      "detected_rays": 25814,
+      "relative_detected_flux_pct": 0.4088502824594834,
+      "zero_volume_scatter_share_pct": 3.1375595088886534,
+      "event_limit_termination_pct": 0.21031746031746032
+    },
+    {
+      "wavelength_nm": 1200,
+      "config": "broad",
+      "label": "72 mm backlight",
+      "optics": {
+        "mode": "Broad backlight",
+        "line_length_mm": 72.0,
+        "line_width_mm": 2.0,
+        "spot_diameter_mm": 6.0,
+        "source_offset_y_mm": 0.0,
+        "source_gap_mm": 2.0,
+        "divergence_x_deg": 8.0,
+        "divergence_y_deg": 3.0,
+        "camera_half_angle_deg": 40.0,
+        "camera_line_width_mm": 4.0,
+        "camera_plane_gap_mm": 1.0,
+        "photons_per_line": 18000,
+        "scan_lines": 112,
+        "camera_pixels": 128,
+        "max_scattering_events": 900,
+        "seed": 711
+      },
+      "detected_rays": 7274,
+      "relative_detected_flux_pct": 0.10356423375851427,
+      "zero_volume_scatter_share_pct": 2.7324042381839293,
+      "event_limit_termination_pct": 0.11274801587301587
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "line": {
+    "weighted_flux_pct_seed712": 0.9354410164737695,
+    "image_correlation_after_2px_smoothing": 0.9882402688565076,
+    "different_seed_image_mean_abs_relative_to_mean": 0.11165490024031079
+  },
+  "collimated": {
+    "weighted_flux_pct_seed712": 0.9502215630396819,
+    "image_correlation_after_2px_smoothing": 0.9889934387675025,
+    "different_seed_image_mean_abs_relative_to_mean": 0.1116869949438248
+  }
+}

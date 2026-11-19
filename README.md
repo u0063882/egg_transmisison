@@ -6,6 +6,10 @@ Simulate the spatial pattern seen from above a whole chicken egg in transmission
 
 > **Status: v0.1 research prototype — not a quantitatively validated imaging model.** The core is physically motivated 3D Monte Carlo code compiled by **Numba**, with tested geometry, Fresnel/Snell interfaces, exponential free paths, HG scattering and absorption. It is **not** a wrapper around the independently validated MCX or PyXOpto engines. Never use it to claim an anatomical structure is visible without comparison to a measured image. Photon count/angles and detector aperture are simplified.
 
+## Latest simulation comparison (580 / 800 / 1200 nm)
+
+[Critical review and illustrated three-wavelength comparison](reports/illumination_critical_review_580_800_1200.md) — controlled comparison of transverse line collimation, spot and offset illumination, with a broad-backlight reference. The 580 and 1200 nm material properties are **hypothetical absorption-sensitivity scenarios**, not measured spectra. Reproduce with `python scripts/compare_three_wavelengths.py --photons 18000 --lines 112 --pixels 128`.
+
 ## Installation (Windows / macOS / Linux, Python 3.11–3.12)
 
 ```bash
