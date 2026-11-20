@@ -7,27 +7,22 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from eggtrans.core import Geometry,Optics,MATERIALS_800,MATERIAL_NAMES,MODE_NAMES,CAMERA_MODES,simulate,projected_masks
-from eggtrans.mcx_engine import backend_status,build_egg_volume,source_config,source_footprint_mm
+from eggtrans.mcx_engine import backend_status,domain_plan,source_config,source_footprint_mm
 from eggtrans.schematic import apparatus_figure
 from eggtrans.visualization import camera_image_figure, camera_scene_3d
 from eggtrans.readout_validation import compare_fixed_scene_readouts
+from eggtrans.acquisition_comparison import compare_matched_acquisitions
 from eggtrans.spectra import load_spectra_csv,at_wavelength
 
 st.set_page_config(page_title='Egg transmission · MCX',layout='wide',page_icon='🥚')
 st.title('Egg transmission · MCX / PMCX')
-st.caption('App v0.7.0 · MCX photon transport · camera selection is on this main page')
+st.caption('App v0.8.0 · MCX photon transport · camera selection is on this main page')
 st.subheader('Camera / acquisition')
 camera_mode=st.radio(
-    'Camera type',
-    CAMERA_MODES,
+    'Camera type', CAMERA_MODES,
     format_func=lambda x: 'Pushbroom (line scan)' if x=='Pushbroom' else 'Normal camera (2D area)',
-    horizontal=True,
-    key='camera_mode',
-)
-st.caption(
-    'Pushbroom: egg translates; one MCX run per scan line. '
-    'Normal 2D camera: stationary egg and source; one full-frame MCX run.'
-)
+    horizontal=True, key='camera_mode')
+st.caption('Pushbroom: egg translates, one row per MCX run. Area: stationary egg and source, one full-frame MCX exposure.')
 st.info('Photon transport is performed by **MCX via PMCX**, not by a custom ray tracer. The geometry, source definitions and idealized camera binning are project-specific. Egg tissue parameters are not fully calibrated.')
 
 with st.sidebar:
@@ -45,7 +40,9 @@ with st.sidebar:
     acceptance=st.slider('Acceptance half-angle (°)',2.,80.,35.,1.)
     slit=st.slider('Observation slit width (mm) — pushbroom only',.5,12.,4.,.5,disabled=camera_mode=='Area')
     st.header('MCX simulation')
-    voxel=st.select_slider('Voxel size (mm)',[.35,.5,.75,1.,1.5,2.],value=.5)
+    voxel=st.select_slider('Voxel size (mm)',[.2,.25,.35,.5,.75,1.,1.5,2.],value=.5)
+    padding=st.select_slider('Lateral MCX air padding (mm)',[4.,6.,8.,12.,16.,24.,32.],value=8.,help='Air outside the active egg, source and camera field. Compare multiple values before trusting transmission.')
+    host_budget=st.select_slider('Domain build safety budget (MiB)',[128.,256.,512.,1024.,2048.],value=512.,help='Approximate host rasterization memory, NOT guaranteed GPU memory. Exceeding this budget blocks allocation.')
     packets=st.select_slider('Photons per MCX run / area exposure',[10_000,30_000,100_000,300_000,1_000_000],value=100_000)
     nlines=st.select_slider('Pushbroom scan lines',[12,24,48,96],value=24,disabled=camera_mode=='Area')
     npixels=st.select_slider('Pixels in x',[32,64,96,128],value=64)
@@ -83,7 +80,8 @@ g=Geometry(egg_width_mm=egg_w,egg_length_mm=egg_l,egg_height_mm=egg_h,shell_thic
 o=Optics(mode=mode,camera_mode=camera_mode,line_length_mm=length,line_width_mm=width,spot_diameter_mm=diameter,
          source_offset_y_mm=offset,source_gap_mm=gap,beam_focal_length_mm=focal,
          camera_half_angle_deg=acceptance,camera_line_width_mm=slit,
-         voxel_mm=voxel,photons_per_line=packets,scan_lines=nlines,camera_pixels=npixels,area_rows=area_rows,
+         voxel_mm=voxel,domain_padding_mm=padding,domain_build_budget_mib=host_budget,
+         photons_per_line=packets,scan_lines=nlines,camera_pixels=npixels,area_rows=area_rows,
          gpu_id=gpu,seed=seed)
 
 st.subheader('Apparatus geometry and selected source')
@@ -100,7 +98,7 @@ if status:
     st.success(msg)
 else:
     st.warning(msg+' Geometry preview still works, but simulation requires PMCX on a supported GPU.')
-st.caption(f'Shell / voxel size = **{shell/voxel:.2f}**. Standard MCX uses one isotropic voxel size throughout the domain; the current simulator limits label volumes to 12 million voxels.')
+st.caption(f'Shell / voxel size = **{shell/voxel:.2f}**. MCX label grids are uniform in this version; the domain now follows the active light source, egg and detector, with adjustable padding and a host-memory safety budget.')
 if voxel >= shell:
     st.warning('Voxel size is at least as large as the 0.35 mm default shell: severe boundary aliasing is possible, including missing shell voxels. Use finer voxels or a mesh/split-voxel solver.')
 elif shell/voxel < 3:
@@ -125,15 +123,33 @@ material[1:,:]=edited.to_numpy(dtype=float)
 st.caption('Only 800 nm albumen/yolk μa, μs, g are literature-based; shell, blood and refractive indices are placeholders unless replaced by measured values.')
 
 try:
-    domain=build_egg_volume(g,o,material)
-    cfgpreview=source_config(domain,o,0.)
-    detector_label = 'angular gate + x/y area binning' if camera_mode=='Area' else 'angular gate + moving slit'
-    st.caption(f'Native MCX source: **{cfgpreview["srctype"]}** · voxel volume {" × ".join(map(str,domain.dims))} '
-               f'({domain.vol.nbytes/1e6:.1f} MB labels, before GPU scratch). Detector: **+z exit-face photons**, then {detector_label}.')
-    with st.expander('Inspect MCX launch parameters'):
+    # Geometry-only preflight; do NOT rasterize millions of voxels on each UI refresh.
+    plan=domain_plan(g,o,material)
+    cfgpreview=source_config(plan,o,0.)
+    detector_label='area x/y readout' if camera_mode=='Area' else 'moving slit readout'
+    st.caption(f'**MCX source:** {cfgpreview["srctype"]} · active mode {mode} · grid '
+               f'{" × ".join(map(str,plan.dims))} = **{plan.nvoxels/1e6:.2f} million voxels**. '
+               f'Label volume {plan.label_memory_mib:.1f} MiB · rough Python rasterization working memory '
+               f'{plan.host_build_estimate_mib:.0f} MiB / {host_budget:.0f} MiB limit. '
+               f'Temporary MCX GPU buffers are additional and GPU-dependent. Detector: {detector_label}.')
+    with st.expander('Inspect source parameters and padding cost'):
         st.json(cfgpreview)
+        variants=[]
+        for mm in (4.,8.,12.,16.,24.):
+            try:
+                pp=domain_plan(g,replace(o,domain_padding_mm=mm),material,enforce_budget=False)
+                variants.append({'Padding (mm)':mm,'Voxel grid':' × '.join(map(str,pp.dims)),
+                                 'Voxels (million)':round(pp.nvoxels/1e6,2),
+                                 'Host build estimate (MiB)':round(pp.host_build_estimate_mib),
+                                 'Within current host budget':pp.host_build_estimate_mib<=host_budget})
+            except ValueError:
+                pass
+        st.dataframe(pd.DataFrame(variants),hide_index=True,use_container_width=True)
+        st.caption('More padding retains more scattered photons before side-boundary escape, '
+                   'but costs memory. These are geometric estimates; run the GPU padding-convergence '
+                   'script before treating an image as independent of domain size.')
 except ValueError as exc:
-    st.error(f'Geometry invalid: {exc}');st.stop()
+    st.error(f'Domain preflight rejected this configuration: {exc}');st.stop()
 
 c1,c2=st.columns(2)
 run=c1.button('▶ Run MCX ' + ('pushbroom scan' if camera_mode=='Pushbroom' else '2D area exposure'),type='primary',use_container_width=True,disabled=not status)
@@ -154,8 +170,8 @@ if run or compare:
     st.session_state['wavelength']=wl
 
 
-def image_plot(image,x,y,name,camera_mode='Pushbroom'):
-    f=go.Figure(go.Heatmap(x=x,y=y,z=image,colorscale='Inferno'))
+def image_plot(image,x,y,name,camera_mode='Pushbroom',zmax=None):
+    f=go.Figure(go.Heatmap(x=x,y=y,z=image,colorscale='Inferno',zmin=0 if zmax is not None else None,zmax=zmax))
     ylabel='scan position y (mm)' if camera_mode=='Pushbroom' else 'image position y (mm)'
     f.update_layout(title=name,xaxis_title='x (mm)',yaxis_title=ylabel,
                     height=500,margin=dict(l=45,r=30,t=50,b=35))
@@ -193,6 +209,41 @@ with st.expander('Diagnostic: compare detector readouts with identical photons',
             st.metric('Relative image discrepancy',
                       f"{diagnostic['diagnostics']['relative_l1_difference']:.3g}")
             st.caption('This is a stationary-source detector consistency check, not a moving-egg pushbroom reconstruction. Both images must agree apart from numerical boundary cases.')
+
+with st.expander('Diagnostic: matched broad-illumination acquisition',expanded=False):
+    st.markdown('''The ordinary pushbroom experiment moves a narrow source with the camera slit;
+    it cannot be compared directly with a stationary area-camera exposure.
+
+    This **controlled comparison** instead uses the **same broad backlight fixed relative
+    to the egg** for both camera readouts, with identical angular acceptance, spatial
+    sampling and photon normalization. The area image requires one MCX run; sequential
+    virtual camera rows require one additional MCX run per row. Their **statistical**
+    images should agree when photon counts are sufficiently high. This is not the
+    actual moving-egg experiment and noise can cause large differences.
+    ''')
+    comparison_rows=st.select_slider('Number of comparison rows',[8,12,24,48],value=12)
+    do_comp=st.button(f'Run matched comparison ({comparison_rows+1} MCX runs)',disabled=not status)
+    if do_comp:
+        try:
+            with st.spinner('Running matched fixed-source MCX exposure and sequential rows…'):
+                matched=compare_matched_acquisitions(g,o,material,rows=comparison_rows)
+        except Exception as exc:
+            st.error(f'Matched acquisition comparison failed: {exc}')
+        else:
+            c1,c2=st.columns(2)
+            shared_zmax=max(float(np.max(matched['area_image'])),
+                            float(np.max(matched['virtual_pushbroom_image'])),1e-12)
+            c1.plotly_chart(image_plot(matched['area_image'],matched['x_mm'],matched['y_mm'],
+                         'Broad illumination · 2D camera','Area',zmax=shared_zmax),use_container_width=True)
+            c2.plotly_chart(image_plot(matched['virtual_pushbroom_image'],matched['x_mm'],matched['y_mm'],
+                         'Same illumination · sequential virtual rows','Area',zmax=shared_zmax),use_container_width=True)
+            st.metric('Integrated transmitted-signal discrepancy',
+                      f"{100*matched['diagnostics']['integrated_signal_relative_difference']:.2f}%")
+            st.caption('Both images are normalized per launched photon packet in each MCX run. '
+                       'Low detected counts can produce very noisy differences. This does not '
+                       'prove agreement of an independently moving spotlight scanner.')
+            with st.expander('Comparison diagnostics'):
+                st.json(matched['diagnostics'])
 
 if 'result' in st.session_state:
     r=st.session_state['result']
@@ -298,7 +349,8 @@ with st.expander('Scientific scope and limitations'):
 - Native MCX **disk** source for spot; native **planar** for transverse, longitudinal, broad illumination. These are verified with unit tests.
 - MCX detects photons leaving the **upper boundary face**. The pushbroom readout has a moving observation slit; the 2D area camera bins the full exit footprint in a **single static MCX run**. Both use a simplified angular gate. No physical lens, spectrograph, sensor, or camera noise is modeled.
 - MCX has one shared focal-length parameter for these sources, not the older model’s independent x/y Gaussian divergences. No false equivalence is implied.
-- The shell is rasterized in voxels, potentially coarse at the typical ~0.35 mm shell thickness; at 1 mm voxel spacing shell detail is **not reliable**.
+- The uniform voxel grid is sized from the **active** MCX source, camera region and egg; padding and a host-rasterization budget are adjustable. GPU memory and photon-record buffers require additional capacity. Check side-boundary convergence on real MCX before relying on quantitative output.
+- The shell is rasterized in voxels, potentially coarse at ~0.35 mm thickness; at 1 mm voxel spacing the shell is **not reliable**, and even at 0.2 mm it is still under two nominal voxels thick.
 - A stationary spot can look like a stripe in the **pushbroom composite** because it moves relative to the egg along y; the **area-camera** image is acquired at one static source position and should not display scan-induced elongation. Internal egg scattering may blur or deform either footprint.
 - At other wavelengths, load experimentally measured optical coefficients. Source spectrum and detector spectral sensitivity are not included; signal is per launched photon packet.
 - The 2D area camera is **monochromatic per run**. It is not a snapshot hyperspectral sensor; to model multiple wavelengths, repeat runs with appropriate coefficients.
