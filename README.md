@@ -113,7 +113,7 @@ The Streamlit expander **Diagnostic: compare detector readouts with identical ph
 
 ## Voxel size and the 0.35 mm eggshell
 
-Standard MCX label volumes use a **uniform isotropic grid**: the same voxel size applies to the egg interior, thin shell, and air. The Streamlit selector offers **0.35 mm** in addition to 0.5–2 mm, but 0.35 mm represents only one nominal voxel across the shell and remains geometrically crude. For the default source and egg geometry this is approximately **10.2 million voxels** at 0.35 mm; the current simulator rejects label volumes larger than **12 million voxels**. Refining to 0.1 mm without changing grid strategy would expand the volume by about 43 times relative to 0.35 mm and exceed this safety bound.
+Standard MCX label volumes use a **uniform isotropic grid**: the same voxel size applies to the egg interior, thin shell, and air. The Streamlit selector now offers **0.20, 0.25 and 0.35 mm** in addition to coarser values. At 0.35 mm a nominal 0.35 mm shell spans only one voxel; at 0.20 mm it still spans fewer than two. The formerly hard-coded 12-million-voxel cap is removed; an adjustable host-memory budget now blocks oversized rasterization. A finer grid may still exceed GPU memory, and it must be evaluated independently for interface accuracy.
 
 Established sub-voxel/mesh alternatives: [MCX split-voxel SVMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC7687934/) for curved interfaces and [MMC](https://github.com/fangq/mmc) with tetrahedral meshes. Neither is connected to this project yet; do not claim locally adaptive voxels in standard MCX. A shell thinner than a coarse voxel may contain both surfaces in a single voxel, which is problematic even for simple split-voxel representations.
 
@@ -209,7 +209,7 @@ Provide **Shell**, **Albumen**, **Yolk**, **Blood spot** rows for each wavelengt
 - `eggtrans/mcx_export.py`: export inspectable **PMCX** inputs sharing the same source definitions; not a second transport engine
 - `tests/`: source geometry, mapping, pushbroom/area camera readout and optional GPU MCX reference tests
 
-Previous illustrated reports under `reports/` are retained as **historical v0.1–v0.3 results generated with the *retired custom* kernel**, not as new MCX predictions. The old batch scripts in `scripts/` are historical as well; use the new Streamlit app or `python -m eggtrans.cli` for future MCX simulations.
+Previous illustrated reports under `reports/` are retained as **historical v0.1–v0.3 results generated with the *retired custom* kernel**, not as new MCX predictions. Historical illumination batch scripts (where present) are not MCX results; use the new Streamlit app, `python -m eggtrans.cli`, or `scripts/run_domain_convergence.py` for current MCX work.
 
 ## Primary open-source sources
 
