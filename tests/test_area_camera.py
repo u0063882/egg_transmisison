@@ -23,10 +23,10 @@ class StaticBackend:
         p = np.array([[size[0]/2, size[1]/2, size[2]],
                       [size[0]-1, size[1]-1, size[2]]], dtype=float)
         v = np.array([[0, 0, 1], [0, 0, 1]], dtype=float)
-        return {'detp': {'p': p, 'v': v}}
+        return {'detp': {'p': p, 'v': v, 'ppath': np.tile([0.,.5,2.,0.,0.],(len(p),1))}}
 
     @staticmethod
-    def detweight(d, prop):
+    def detweight(d, prop,unitinmm=None):
         return np.array([0.6, 0.8])
 
 
