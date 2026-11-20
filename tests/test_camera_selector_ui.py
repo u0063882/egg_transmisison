@@ -11,5 +11,5 @@ def test_camera_type_radio_is_visible_before_sidebar():
     assert content.count("camera_mode=st.radio(") == 1
     assert content.index("camera_mode=st.radio(") < content.index("with st.sidebar:")
     assert "key='camera_mode'" in content
-    assert "App v0.5.1" in content
+    assert "App v0.6.0" in content
     assert "'Normal camera (2D area)'" in content
