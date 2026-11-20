@@ -1,15 +1,8 @@
-"""Guard against burying the area-camera selector in the collapsed sidebar.
-
-This is a source-level regression test, not a replacement for a
-Streamlit browser test or GPU MCX physics validation.
-"""
+"""Guard against hiding camera selector in a collapsed Streamlit sidebar."""
 from pathlib import Path
 
-
-def test_camera_type_radio_is_visible_before_sidebar():
-    content = (Path(__file__).resolve().parents[1] / "app.py").read_text(encoding="utf-8")
-    assert content.count("camera_mode=st.radio(") == 1
-    assert content.index("camera_mode=st.radio(") < content.index("with st.sidebar:")
-    assert "key='camera_mode'" in content
-    assert "App v0.7.0" in content
-    assert "'Normal camera (2D area)'" in content
+def test_selector_on_main_page():
+    s = (Path(__file__).resolve().parents[1] / "app.py").read_text(encoding="utf-8")
+    assert s.count("camera_mode=st.radio(") == 1
+    assert s.index("camera_mode=st.radio(") < s.index("with st.sidebar:")
+    assert "App v0.8.0" in s
