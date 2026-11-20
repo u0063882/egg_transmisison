@@ -217,7 +217,7 @@ if 'result' in st.session_state:
     show_yolk=oc2.toggle('Yolk outline',value=False,key='overlay_yolk')
     show_source=oc3.toggle('Illumination outline',value=False,key='overlay_source')
     show_3d=oc4.toggle('Interactive 3D view',value=True,key='overlay_3d')
-    if recorded_mode=='Pushbroom' and show_source:
+    if recorded_mode=='Pushbroom' and (show_source or show_3d):
         selected_index=st.slider('Show instantaneous source at scan line',0,len(y)-1,
                                  value=len(y)//2,step=1,key='overlay_selected_scan')
         selected_y=float(y[selected_index])
@@ -245,9 +245,13 @@ if 'result' in st.session_state:
 
     if show_3d:
         st.markdown('**3D model and simulated detector image**')
-        show_plane=st.toggle('Show output pattern on camera plane',value=True,key='show_3d_plane')
-        scene=camera_scene_3d(image,x,y,run_g,run_o,show_egg=show_egg,
-                              show_yolk=show_yolk,show_source=show_source,
+        sc1,sc2,sc3,sc4=st.columns(4)
+        show_egg_3d=sc1.toggle('3D: egg envelope',value=True,key='show_3d_egg')
+        show_yolk_3d=sc2.toggle('3D: yolk',value=True,key='show_3d_yolk')
+        show_source_3d=sc3.toggle('3D: illumination',value=True,key='show_3d_source')
+        show_plane=sc4.toggle('3D: camera output',value=True,key='show_3d_plane')
+        scene=camera_scene_3d(image,x,y,run_g,run_o,show_egg=show_egg_3d,
+                              show_yolk=show_yolk_3d,show_source=show_source_3d,
                               show_pattern=show_plane,scan_y_mm=selected_y)
         st.plotly_chart(scene,use_container_width=True)
         if recorded_mode=='Pushbroom':
