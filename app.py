@@ -9,12 +9,13 @@ import streamlit as st
 from eggtrans.core import Geometry,Optics,MATERIALS_800,MATERIAL_NAMES,MODE_NAMES,CAMERA_MODES,simulate,projected_masks
 from eggtrans.mcx_engine import backend_status,build_egg_volume,source_config,source_footprint_mm
 from eggtrans.schematic import apparatus_figure
+from eggtrans.visualization import camera_image_figure, camera_scene_3d
 from eggtrans.readout_validation import compare_fixed_scene_readouts
 from eggtrans.spectra import load_spectra_csv,at_wavelength
 
 st.set_page_config(page_title='Egg transmission · MCX',layout='wide',page_icon='🥚')
 st.title('Egg transmission · MCX / PMCX')
-st.caption('App v0.6.0 · MCX photon transport · camera selection is on this main page')
+st.caption('App v0.7.0 · MCX photon transport · camera selection is on this main page')
 st.subheader('Camera / acquisition')
 camera_mode=st.radio(
     'Camera type',
@@ -137,7 +138,6 @@ except ValueError as exc:
 c1,c2=st.columns(2)
 run=c1.button('▶ Run MCX ' + ('pushbroom scan' if camera_mode=='Pushbroom' else '2D area exposure'),type='primary',use_container_width=True,disabled=not status)
 compare=c2.button('Compare spot vs transverse line',use_container_width=True,disabled=not status)
-showtruth=st.checkbox('Show geometric ground truth separately (NOT observed by camera)',False)
 
 if run or compare:
     try:
@@ -196,20 +196,70 @@ with st.expander('Diagnostic: compare detector readouts with identical photons',
 
 if 'result' in st.session_state:
     r=st.session_state['result']
+    image=r['image']
     x,y=r['x_mm'],r['scan_y_mm']
     recorded_mode=r.get('camera_mode',r['optics'].get('camera_mode','Pushbroom'))
+    run_g=Geometry(**r['geometry'])
+    run_o=Optics(**r['optics'])
     st.subheader(f'MCX {"pushbroom image" if recorded_mode=="Pushbroom" else "single 2D exposure"} · {st.session_state["wavelength"]} nm')
-    st.caption(f'Captured using {recorded_mode} mode; {r["diagnostics"]["mcx_runs"]} MCX run(s). Values are weighted photons per launched packet, not absolute camera counts.')
-    image=r['image']
+    st.caption(f'Captured using **{recorded_mode}** mode; {r["diagnostics"]["mcx_runs"]} MCX run(s). '
+               'The image is computed from detected photons; optional outlines are independent **model geometry**, not measured boundaries.')
+    if (asdict(g)!=r['geometry'] or asdict(o)!=r['optics'] or
+            int(wl)!=int(st.session_state['wavelength']) or
+            not np.array_equal(material,r['materials'])):
+        st.warning('The simulation inputs have changed since this image was calculated. '
+                   'The overlays below use the **saved geometry and source settings of the result**. '
+                   'Rerun MCX to update the transmitted signal.')
+
+    st.markdown('**Display overlays** — all contours are model truth/source settings, not detected edges')
+    oc1,oc2,oc3,oc4=st.columns(4)
+    show_egg=oc1.toggle('Full egg outline',value=False,key='overlay_egg')
+    show_yolk=oc2.toggle('Yolk outline',value=False,key='overlay_yolk')
+    show_source=oc3.toggle('Illumination outline',value=False,key='overlay_source')
+    show_3d=oc4.toggle('Interactive 3D view',value=True,key='overlay_3d')
+    if recorded_mode=='Pushbroom' and show_source:
+        selected_index=st.slider('Show instantaneous source at scan line',0,len(y)-1,
+                                 value=len(y)//2,step=1,key='overlay_selected_scan')
+        selected_y=float(y[selected_index])
+        st.caption(f'Illumination outline represents just one source position (line {selected_index+1}/{len(y)} '
+                   f'at y={selected_y:.1f} mm); the finished pushbroom image combines **all** scan positions.')
+    else:
+        selected_y=0.
+    output_figure=camera_image_figure(
+        image,x,y,run_g,run_o,show_egg=show_egg,show_yolk=show_yolk,
+        show_source=show_source,scan_y_mm=selected_y,
+        title='MCX detected transmission + optional geometry overlays')
+    st.plotly_chart(output_figure,use_container_width=True)
+    if show_egg or show_yolk or show_source:
+        st.caption('Dashed outlines are geometric information added AFTER the MCX simulation: '
+                   'egg/yolk = orthographic model silhouettes; illumination = source LAUNCH footprint '
+                   'before scattering. None is a reconstructed or measured internal boundary.')
+
+    showtruth=st.checkbox('Also show material ground truth as a separate image',False)
     if showtruth:
-        a,b=st.columns(2)
-        a.plotly_chart(image_plot(image,x,y,'Detected photons (no geometry overlay)',recorded_mode),use_container_width=True)
-        m=projected_masks(Geometry(**r['geometry']),x,y)
+        m=projected_masks(run_g,x,y)
         truth=np.zeros_like(image)
         truth[m['egg']]=1;truth[m['yolk']]=2;truth[m['blood']]=3
-        b.plotly_chart(image_plot(truth,x,y,'Ideal geometry · NOT a camera image',recorded_mode),use_container_width=True)
-    else:
-        st.plotly_chart(image_plot(image,x,y,'Detected photons only',recorded_mode),use_container_width=True)
+        st.plotly_chart(image_plot(truth,x,y,'Material geometry · NOT a camera image',recorded_mode),
+                        use_container_width=True)
+
+    if show_3d:
+        st.markdown('**3D model and simulated detector image**')
+        show_plane=st.toggle('Show output pattern on camera plane',value=True,key='show_3d_plane')
+        scene=camera_scene_3d(image,x,y,run_g,run_o,show_egg=show_egg,
+                              show_yolk=show_yolk,show_source=show_source,
+                              show_pattern=show_plane,scan_y_mm=selected_y)
+        st.plotly_chart(scene,use_container_width=True)
+        if recorded_mode=='Pushbroom':
+            st.caption('3D display is a **conceptual assembly**: the image plane contains the '
+                       'finished pushbroom reconstruction from multiple egg positions. '
+                       'The illumination shown is only one selected scan position. '
+                       'These did not all exist simultaneously during acquisition.')
+        else:
+            st.caption('3D display shows one stationary MCX area-camera exposure. '
+                       'The colored upper plane is the photon-exit histogram, not a '
+                       'camera-lens optical projection or a recovered 3D structure.')
+
     d=r['diagnostics']
     a,b,c=st.columns(3)
     a.metric('Photons launched',f'{d["launched_photons"]:,}')
@@ -218,9 +268,16 @@ if 'result' in st.session_state:
     if d['camera_accepted_photons'] < 500:
         st.warning('Few accepted photons. Interpretation is Monte Carlo-noise dominated; increase the photon budget or camera acceptance.')
     if st.session_state.get('compared'):
+        st.markdown('**Source comparison** · each image uses its own saved source geometry')
         a,b=st.columns(2)
         for ax,(name,rr) in zip((a,b),st.session_state['compared'].items()):
-            ax.plotly_chart(image_plot(rr['image'],rr['x_mm'],rr['scan_y_mm'],name,rr['camera_mode']),use_container_width=True)
+            ro=Optics(**rr['optics'])
+            rg=Geometry(**rr['geometry'])
+            xy=float(rr['scan_y_mm'][len(rr['scan_y_mm'])//2]) if ro.camera_mode=='Pushbroom' else 0.
+            ax.plotly_chart(camera_image_figure(
+                rr['image'],rr['x_mm'],rr['scan_y_mm'],rg,ro,
+                show_egg=show_egg,show_yolk=show_yolk,show_source=show_source,
+                scan_y_mm=xy,title=name),use_container_width=True)
     metadata={'engine':'MCX via PMCX','wavelength_nm':st.session_state['wavelength'],
               'optics':r['optics'],'geometry':r['geometry'],'materials':r['materials'].tolist(),
               'diagnostics':r['diagnostics']}
@@ -241,5 +298,7 @@ with st.expander('Scientific scope and limitations'):
 - A stationary spot can look like a stripe in the **pushbroom composite** because it moves relative to the egg along y; the **area-camera** image is acquired at one static source position and should not display scan-induced elongation. Internal egg scattering may blur or deform either footprint.
 - At other wavelengths, load experimentally measured optical coefficients. Source spectrum and detector spectral sensitivity are not included; signal is per launched photon packet.
 - The 2D area camera is **monochromatic per run**. It is not a snapshot hyperspectral sensor; to model multiple wavelengths, repeat runs with appropriate coefficients.
+- Image overlay curves and the 3D yolk/egg surfaces are **geometric ground truth**, explicitly separate from MCX photon transport. The 3D upper image plane is a visualization of camera output, NOT optical tomography or inferred boundaries.
+- In pushbroom mode the 3D scene combines the completed scan with a **single instantaneous source position**; do not interpret it as a simultaneous exposure.
 - No claim is made of having experimentally validated yolk/blood boundaries. Run the known-answer Beer–Lambert test in `tests/test_mcx_physics.py` on your GPU.
 ''')
