@@ -39,10 +39,11 @@ class StubPMCX:
         p = np.array([[nx*.5,ny*.5,nz-1.],
                       [nx*.5+1.,ny*.5+2.,nz-1.],
                       [nx*.5-1.,ny*.5-2.,nz-1.]])
-        return {'detp':{'p':p,'v':np.tile([0.,0.,1.],(3,1))}}
+        return {'detp':{'p':p,'v':np.tile([0.,0.,1.],(3,1)),
+                        'ppath':np.tile([0.,.5,2.,0.,0.],(3,1))}}
 
     @staticmethod
-    def detweight(d,p):
+    def detweight(d,p,unitinmm=None):
         return np.ones(3)
 
 
