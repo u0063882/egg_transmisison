@@ -1,4 +1,4 @@
-# Egg transmission simulator — v0.8 (MCX)
+# Egg transmission simulator — v0.9 (MCX)
 
 **Python · Streamlit · MCX photon transport through `pmcx` · pushbroom line-scan or stationary 2D area camera**
 
@@ -54,6 +54,64 @@ python -m eggtrans.cli --camera Area --mode Spot --photons 1000000 --area-rows 9
 python -m eggtrans.cli --camera Area --mode "Transverse line" --photons 1000000 --area-rows 96 --pixels 96 --output results/area_line
 python -m eggtrans.cli --camera Pushbroom --mode Spot --photons 100000 --lines 48 --output results/scan_spot
 ```
+
+## v0.9: exclude photons that bypass the egg
+
+**Why the egg sides look missing:** The source illuminates a finite x footprint
+(a 48 mm line is only 2 mm wider per side than the default 44 mm egg), and
+bright unattenuated air paths dominate the raw detector colour scale. The
+egg boundaries are geometric ground truth, not necessarily contours in
+measured transmitted light. Filtering bypass light may improve visibility
+but cannot restore photon-starved side pixels.
+
+**New Streamlit camera setting:** `Detector photon-history filter`:
+
+| Mode | MCX photon paths accepted |
+|---|---|
+| **All exits** | All photons passing camera angle/FOV/slit filters, including air-only bypass |
+| **Traversed egg** (default) | Partial MCX path through shell, albumen, yolk or blood |
+| **Traversed interior** | Path through albumen, yolk or blood; rejects shell-only grazing paths |
+
+The adjustable `Minimum path inside selected egg region (mm)` rejects
+histories below a chosen material path length. Set it to **0 mm** to include
+any positive path through the selected egg region. The filter uses official
+MCX `detp.ppath`, written by `savedetflag='DPXV'`. Those lengths are
+stored in **voxel units**; they are multiplied by `voxel_mm` for thresholding.
+For detected-photon weights, the official
+`pmcx.detweight(detp, prop, unitinmm=voxel_mm)` is now called with explicit
+voxel size, correcting the previous absorption scaling when the detector
+record did not include that metadata.
+
+The program preserves the original `image_unfiltered` alongside the
+selected `image`. In Streamlit, **Compare detected light BEFORE and AFTER
+direct-path filtering** shows a shared-scale comparison from the same
+MCX run. The downloaded NPZ contains both images and the run metadata
+reports excluded photons and energy.
+
+**Important:** MCX photon-history selection is an *idealized diagnostic*,
+not a physical camera. A real HSI or area camera cannot know which
+detected photons passed through the egg. To suppress direct stray light
+physically, build and validate a baffled source path, dark surrounding
+enclosure, field stop and lens aperture; these optical components are
+**not modeled** by the diagnostic filter. Do not describe the gated image as
+the output of an actual optical baffle.
+
+**For lateral coverage:** compare transverse lines of **48 mm and 60 mm**,
+with matched launched energy, adequate padding and a sufficiently high
+photon budget (start with at least 300,000 photons per scan line). A spot
+source narrower than the egg cannot illuminate the entire egg width.
+Inspect `All exits` and `Traversed egg` before deciding whether absent
+sides are a camera artifact or truly weak transmitted light.
+
+Local software tests verify gate medium indices, thresholds in mm,
+missing-path failures, explicit PMCX voxel-unit weighting, and gated/raw
+camera histograms in both modes. GPU physics tests must be executed on
+your NVIDIA workstation (`python -m eggtrans.verify_physics` and
+`RUN_MCX_PHYSICS=1 python -m pytest -q tests/test_mcx_physics.py`).
+
+MCX reference documentation:
+[detected photon partial paths](https://github.com/fangq/mcx/blob/master/README.md)
+and [PMCX detweight implementation](https://github.com/fangq/mcx/blob/master/pmcx/pmcx/utils.py).
 
 ## v0.8: source-specific MCX domain and controlled camera comparison
 
@@ -141,7 +199,7 @@ The MCX source focus uses the documented native planar/disk focusing parameter (
 1. `eggtrans/mcx_engine.py` voxelizes nested ellipsoids into **nonzero** MCX volume labels: air=1, shell=2, albumen=3, yolk=4, blood=5. The exterior/background row 0 and air row 1 both have air properties. Shell thickness is only approximately represented by voxelization.
 2. In pushbroom mode, each scan line produces an **MCX native disk/planar** source at that scan position; in area mode a **single static MCX run** is used; `pmcx.mcxlab(cfg)` performs **all** scattering, absorption, Fresnel/refraction and photon transport.
 3. MCX records photons leaving the **+z simulation box face** (via MCX `bc='______000001'`, save exit positions and directions). This is a transmission-detection surface, not internal fluence.
-4. The project applies only a **geometrical pixel readout** to those recorded exit photons: accept ray directions within the camera half-angle, then either restrict to the moving y slit and bin x (pushbroom), or bin all accepted x/y photons into a 2D image (area camera). Photon weights are computed by `pmcx.detweight()` rather than a local Beer–Lambert implementation.
+4. The project applies only a **geometrical pixel readout** to those recorded exit photons: accept ray directions within the camera half-angle, then either restrict to the moving y slit and bin x (pushbroom), or bin all accepted x/y photons into a 2D image (area camera). Photon weights are computed by `pmcx.detweight(..., unitinmm=voxel_mm)` rather than a local Beer–Lambert implementation; the camera's optional diagnostic path gate uses MCX material path records.
 5. The result is one spatial 2D image per wavelength. A complete HSI cube requires repeating with measured optical coefficients at every wavelength.
 
 **Camera approximation:** Both modes use idealized telecentric/angular-gated detection at the upper MCX box face; the area camera does not apply an observation slit. It does not trace the real camera lens or model numerical aperture, aperture stop, PSF, slit throughput, sensor sensitivity or shot/read noise. One 1 mm voxel near a 0.35 mm shell is *not* sufficient to resolve shell geometry; prefer a finer grid or later migrate to MCX split-voxel media.
