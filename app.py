@@ -13,13 +13,23 @@ from eggtrans.spectra import load_spectra_csv,at_wavelength
 
 st.set_page_config(page_title='Egg transmission · MCX',layout='wide',page_icon='🥚')
 st.title('Egg transmission · MCX / PMCX')
-st.caption('MCX photon transport · choose moving-egg pushbroom or stationary 2D area camera')
+st.caption('App v0.5.1 · MCX photon transport · camera selection is on this main page')
+st.subheader('Camera / acquisition')
+camera_mode=st.radio(
+    'Camera type',
+    CAMERA_MODES,
+    format_func=lambda x: 'Pushbroom (line scan)' if x=='Pushbroom' else 'Normal camera (2D area)',
+    horizontal=True,
+    key='camera_mode',
+)
+st.caption(
+    'Pushbroom: egg translates; one MCX run per scan line. '
+    'Normal 2D camera: stationary egg and source; one full-frame MCX run.'
+)
 st.info('Photon transport is performed by **MCX via PMCX**, not by a custom ray tracer. The geometry, source definitions and idealized camera binning are project-specific. Egg tissue parameters are not fully calibrated.')
 
 with st.sidebar:
-    st.header('Camera / acquisition')
-    camera_mode=st.radio('Camera type',CAMERA_MODES,format_func=lambda x: 'Pushbroom (line scan)' if x=='Pushbroom' else 'Normal camera (2D area)',horizontal=False)
-    st.caption('Pushbroom: egg translates, one row per MCX run. Area: egg and source stay still, one full-frame MCX exposure.')
+    st.caption('Camera: ' + ('Pushbroom (line scan)' if camera_mode == 'Pushbroom' else 'Normal camera (2D area)'))
     st.header('Illumination (MCX native source)')
     mode=st.selectbox('Illumination',MODE_NAMES)
     length=st.slider('Line length / broad size (mm)',10.,90.,48.,1.,disabled=mode=='Spot')
