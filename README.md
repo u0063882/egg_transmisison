@@ -1,4 +1,4 @@
-# Egg transmission simulator — v0.6 (MCX)
+# Egg transmission simulator — v0.7 (MCX)
 
 **Python · Streamlit · validated MCX photon-transport engine through `pmcx` · pushbroom line-scan **or stationary 2D area camera**
 
@@ -54,6 +54,20 @@ python -m eggtrans.cli --camera Area --mode Spot --photons 1000000 --area-rows 9
 python -m eggtrans.cli --camera Area --mode "Transverse line" --photons 1000000 --area-rows 96 --pixels 96 --output results/area_line
 python -m eggtrans.cli --camera Pushbroom --mode Spot --photons 100000 --lines 48 --output results/scan_spot
 ```
+
+## Camera result overlays and interactive 3D projection
+
+After running a simulation, use the three **Display overlays** switches to add:
+
+- **Full egg outline:** orthographic silhouette of the input ellipsoid.
+- **Yolk outline:** input yolk ellipsoid silhouette, including x/y offset (not shown if yolk disabled).
+- **Illumination outline:** MCX **source launch footprint** at the input plane, before photons travel through the egg. This is *not* the transmitted illumination footprint or a recovered boundary.
+
+All outlines default **off** and are added after photon transport. The camera heatmap is always the actual returned MCX detector histogram. Geometry overlays use the **saved inputs from the image calculation**: changing sliders without rerunning cannot move the overlays relative to the old result. For pushbroom acquisition, the **Show instantaneous source at scan line** slider chooses which source position to visualize; the finished pushbroom image includes all line positions.
+
+**Interactive 3D view** displays a translucent ellipsoidal egg, optional yolk, one instantaneous 3D source footprint at the source plane, and the simulated camera image mapped to a flat upper detector plane. The camera output is a 2D image, *not* a reconstruction of the interior. In pushbroom mode, the image is an **assembled scan from multiple times**; the displayed source is **one selected instant**. The view is therefore an explanatory composite, not a frozen simultaneous physical scene. Toggle **Show output pattern on camera plane** to uncover the interior geometry.
+
+The renderer uses Plotly for all graphics and uses no custom transport, ray-tracing, or inference algorithms. The output color plane is made from actual MCX image values; it is never synthesized from the egg/yolk geometry.
 
 ## Camera readout consistency check
 
@@ -150,6 +164,7 @@ Provide **Shell**, **Albumen**, **Yolk**, **Blood spot** rows for each wavelengt
 - `eggtrans/mcx_engine.py`: PMCX configuration, voxel-label setup, photo exit-face readout, known-answer phantoms
 - `eggtrans/schematic.py`: interactive top/side views tied to MCX source parameters
 - `eggtrans/readout_validation.py`: MCX photon-exit detector equivalence check, without custom optical transport
+- `eggtrans/visualization.py`: 2D image overlays and conceptual interactive 3D plot, without any photon transport
 - `eggtrans/verify_physics.py`: execute the reference phantoms using real MCX
 - `eggtrans/spectra.py`: measured spectral CSV support
 - `eggtrans/cli.py`: batch run using same MCX entry point
