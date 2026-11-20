@@ -1,24 +1,16 @@
 import json
 import numpy as np
-from eggtrans.core import Geometry, Optics
-from eggtrans.mcx_export import voxelize, export
+from eggtrans.core import Optics
+from eggtrans.mcx_export import export
 
 
-def test_voxel_materials_and_size():
-    v, extent=voxelize(Geometry(),Optics(),voxel_mm=1.)
-    assert v.ndim==3
-    assert set(np.unique(v))=={0,1,2,3,4}
-    assert v.shape==tuple(int(n) for n in extent)
-
-
-def test_mcx_export(tmp_path):
-    paths=export(output=tmp_path/'m',voxel_mm=1.,scan_lines=3)
+def test_export_uses_same_spot_native_source_as_interactive_mcx(tmp_path):
+    paths=export(o=Optics(mode='Spot',voxel_mm=2,scan_lines=3,photons_per_line=500),output=tmp_path)
     assert len(paths)==3
-    meta=json.loads((tmp_path/'m'/'voxel_meta.json').read_text())
-    arr=np.fromfile(tmp_path/'m'/'egg_labels.bin',dtype=np.uint8).reshape(meta['shape_xyz'],order='F')
-    assert (arr==3).sum()>0
-    a=json.loads(paths[0].read_text())
-    b=json.loads(paths[-1].read_text())
-    assert a['Domain']['Media'][3]['mus']==5.35
-    assert a['Optode']['Source']['Type']=='planar'
-    assert a['Optode']['Source']['Pos'][1] < b['Optode']['Source']['Pos'][1]
+    c=json.loads(paths[0].read_text())
+    assert c['srctype']=='disk'
+    assert c['bc']=='______000001'
+    assert c['volume_npz']=='mcx_domain.npz'
+    vol=np.load(tmp_path/'mcx_domain.npz')['vol']
+    assert set(np.unique(vol))=={1,2,3,4,5}
+    assert c['srcpos'][1]<json.loads(paths[-1].read_text())['srcpos'][1]

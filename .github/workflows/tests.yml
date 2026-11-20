@@ -1,10 +1,8 @@
-name: Python tests
-
+name: Backend-independent Python tests
 on:
   push:
     branches: [main]
   pull_request:
-
 jobs:
   tests:
     runs-on: ubuntu-latest
@@ -16,11 +14,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install
+      - name: Install package and tests
         run: |
           python -m pip install --upgrade pip
           python -m pip install . pytest
-      - name: Tests
+      - name: Test source definitions / geometry / camera adapter
         run: python -m pytest -q
-      - name: Batch smoke test
-        run: python -m eggtrans.cli --photons 500 --lines 8 --pixels 16 --output results/ci_smoke
+      - name: Source-config export smoke test (no GPU required)
+        run: python -m eggtrans.mcx_export --mode Spot --voxel-mm 2 --scan-lines 3 --output results/ci_case
+# Physics tests intentionally require a CUDA runner and explicit RUN_MCX_PHYSICS=1.

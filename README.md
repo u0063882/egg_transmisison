@@ -1,113 +1,119 @@
-# Egg transmission line-scan simulator
+# Egg transmission simulator — v0.4 (MCX)
 
-**Python | Monte Carlo photon transport | interactive Streamlit explorer**
+**Python · Streamlit · validated MCX photon-transport engine through `pmcx` · pushbroom line-scan camera**
 
-Simulate the spatial pattern seen from above a whole chicken egg in transmission under a **fixed pushbroom camera and moving egg**, for various fibre-fed tungsten-halogen illumination geometries. Designed for an existing **150 W SCHOTT/SCHOLZ-type halogen lamp, gold reflector, no IR cutoff, and fibre line/spot optics**, but the model is generic.
+This project investigates whether a transmitted-light hyperspectral camera can recover spatial structures (e.g. yolk boundary, synthetic blood inclusion) in a moving egg. The project now uses **MCX/PMCX exclusively for the Monte Carlo photon transport**. The previous self-written Monte Carlo kernel was removed from the active simulation path.
 
-> **Status: v0.1 research prototype — not a quantitatively validated imaging model.** The core is physically motivated 3D Monte Carlo code compiled by **Numba**, with tested geometry, Fresnel/Snell interfaces, exponential free paths, HG scattering and absorption. It is **not** a wrapper around the independently validated MCX or PyXOpto engines. Never use it to claim an anatomical structure is visible without comparison to a measured image. Photon count/angles and detector aperture are simplified.
+> **Scientific status:** The **transport solver is established** (MCX), but this **egg/instrument model is *not* experimentally validated**. The 800 nm albumen and yolk optical properties are literature anchors; the shell, blood and refractive indices are illustrative defaults. At wavelengths other than 800 nm, the default properties **do not change** unless a CSV with measurements is supplied. A real camera lens, spectrograph, shell microtexture and measured 150 W SCHOTT emitter beam profiles are *not* modeled.
 
-## New: off-centre yolk falsification test (800 nm)
+## Install with Conda (Windows / NVIDIA GPU)
 
-[Report: no-yolk vs central and displaced yolk, with real camera images **without overlays**](reports/yolk_displacement_800nm.md). The code now has `Geometry.include_yolk`, yolk x/y/z offset controls in Streamlit, and a homogeneous-phantom negative control. The prior cyan contours were **ground-truth geometry**, not photon-inferred boundaries. Reproduce with `python scripts/validate_yolk_shift.py --photons 16000 --lines 112 --pixels 128 --seeds 881 882`.
-
-## Latest simulation comparison (580 / 800 / 1200 nm)
-
-[Critical review and illustrated three-wavelength comparison](reports/illumination_critical_review_580_800_1200.md) — four principal illumination geometries, plus a broad-backlight throughput reference, reproducible code and a two-seed Monte Carlo check. **580 and 1200 nm are explicitly hypothetical absorption-sensitivity scenarios, not measured spectral predictions.** Reproduce with `python scripts/compare_three_wavelengths.py --photons 18000 --lines 112 --pixels 128`.
-
-## Installation (Windows / macOS / Linux, Python 3.11–3.12)
-
-```bash
-python -m venv .venv
-# Windows PowerShell: .venv\Scripts\Activate.ps1
-# Linux/macOS: source .venv/bin/activate
+```powershell
+conda create -n eggtrans python=3.11 -y
+conda activate eggtrans
+cd path\to\egg_transmisison
 python -m pip install -r requirements.txt
-streamlit run app.py
+python -m pip install pytest
+python -c "import pmcx; print(pmcx.gpuinfo())"
+python -m streamlit run app.py
 ```
 
-A local browser interface opens. The first scan includes one-time Numba compilation. Start at **800 nm**, choose **Transverse line**, then press **Run scan**. Increase packets if the signal is sparse. Use **Compare 4 sources** to compare illumination types with equal launched photon counts. Test beam divergence in x and y separately and source–camera offset; vary camera angular acceptance to emulate directional collection.
+**PMCX needs a compatible NVIDIA CUDA GPU** for its standard binary backend; NVIDIA drivers must be installed. The pip wheel typically includes the CUDA runtime, so a full CUDA toolkit is normally unnecessary. Without an operational MCX backend, the application can show its geometry schematic but **will not silently switch to a home-built ray tracer**. For Intel/AMD/OpenCL machines, MCX-CL/`pmcxcl` may be suitable as an additional future backend, but it is not wired or verified in this version.
 
-Alternative batch mode:
+## Source geometries: important spot/line distinction
 
-```bash
-python -m eggtrans.cli --mode "Transverse line" --photons 20000 --lines 64 --pixels 96 --output results/line_800
-python -m eggtrans.cli --mode Spot --photons 20000 --output results/spot_800
-pytest -q
+The camera observes a fixed horizontal line x across the egg. The egg translates along y. A fixed light source beneath the camera appears to move along the egg in the egg-relative reference frame.
+
+| Selection | Native MCX `srctype` | Instantaneous footprint on underside of egg |
+|---|---|---|
+| **Spot** | `disk` | Circular disk of user-specified diameter |
+| **Transverse line** | `planar` | Long in x, narrow in y (perpendicular to translation) |
+| **Longitudinal line** | `planar` | Narrow in x, long in y (parallel to translation) |
+| **Broad backlight** | `planar` | Square area in xy |
+
+![Instantaneous MCX source footprints](docs/illumination_footprints.png)
+
+Both the *launch parameters* and the *Streamlit top-view schematic* use `source_footprint_mm()` as a single source of truth. Tests assert the type, size, orientation and y displacement of each illumination mode.
+
+**Why a spot can look like a line in the reconstructed image:** at every scan position the spot illuminates approximately the same x region of the **moving** egg. Stacking measurements of its successive y positions can therefore create a **longitudinal bright stripe**. This is expected with a pushbroom scan and does not in itself indicate the wrong light source. The schematic independently shows the **instantaneous** circular spot.
+
+The MCX source focus uses the documented native planar/disk focusing parameter (`srcdir[3]`): zero = collimated, negative = diverging, positive = converging. Unlike the original custom simulator, the interface no longer advertises independently configurable x/y divergence; MCX's native focal setting does not guarantee those controls. A narrow source is not necessarily an angularly collimated one.
+
+## Transport and camera model
+
+1. `eggtrans/mcx_engine.py` voxelizes nested ellipsoids into **nonzero** MCX volume labels: air=1, shell=2, albumen=3, yolk=4, blood=5. The exterior/background row 0 and air row 1 both have air properties. Shell thickness is only approximately represented by voxelization.
+2. Every pushbroom scan line produces an **MCX native disk/planar** source at that scan position; `pmcx.mcxlab(cfg)` performs **all** scattering, absorption, Fresnel/refraction and photon transport.
+3. MCX records photons leaving the **+z simulation box face** (via MCX `bc='______000001'`, save exit positions and directions). This is a transmission-detection surface, not internal fluence.
+4. The project applies only a **geometrical pixel readout** to those recorded exit photons: accept ray directions within the camera half-angle, require y within the camera's observation slit, bin transmitted energy by x. Photon weights are computed by `pmcx.detweight()` rather than a local Beer–Lambert implementation.
+5. The result is one spatial 2D image per wavelength. A complete HSI cube requires repeating with measured optical coefficients at every wavelength.
+
+**Camera approximation:** This is an idealized telecentric/angular-gated line receiver at the upper MCX box face. It does not trace the real camera lens or model numerical aperture, aperture stop, PSF, slit throughput, sensor sensitivity or shot/read noise. One 1 mm voxel near a 0.35 mm shell is *not* sufficient to resolve shell geometry; prefer a finer grid or later migrate to MCX split-voxel media.
+
+**Source normalization:** images are reported per launched photon packet; a 150 W lamp does **not** automatically translate to absolute irradiance or wavelength-dependent brightness. Separate the spot/line irradiance, angular emission and spectral power when comparing hardware.
+
+## Reference tests — two independent physical expectations
+
+The project includes two tests that **actually call PMCX**, rather than verifying a custom implementation against itself:
+
+**1. Beer–Lambert slab in transmission:** non-scattering, index-matched slab of thickness **12 mm**. For the independent values μa = 0, 0.03 and 0.10 mm⁻¹, expected total transmission is `exp(-μa × 12 mm)`. MCX must produce those exit-weight fractions within 4.5% relative tolerance.
+
+**2. Transparent source footprints:** no egg, no absorption, no scattering, perfectly collimated. A **native MCX disk** must project a nearly circular spot (x/y standard-deviation ratio 0.85–1.15). A **native MCX planar stripe** must produce a long transverse line (x/y ratio >10). These tests detect a spot accidentally being configured as a line.
+
+Run the actual MCX physics checks on a CUDA-equipped machine:
+
+```powershell
+conda activate eggtrans
+python -m eggtrans.verify_physics
+# Or using pytest:
+$env:RUN_MCX_PHYSICS = '1'
+python -m pytest -q tests/test_mcx_physics.py
 ```
 
-Outputs: `.npz` (raw relative per-launched-packet image + ground-truth projections + metadata), `.png`, `.svg`, `.json`. The **asinh** PNG display is visibility-enhanced; the NPZ contains the unmodified Monte Carlo signal.
+For the rest of the software tests (no GPU needed):
 
-## Coordinate system and experiment
+```powershell
+python -m pytest -q
+```
 
-- **x**: across conveyor, parallel to the instantaneous camera line.
-- **y**: egg translation direction (along long axis of the egg in this demo).
-- **z**: optical axis, halogen illumination from below, camera above.
-- Camera and illuminator stay *fixed in laboratory coordinates*; mathematical equivalent is to keep the egg fixed and shift the source and camera scan line together across the egg.
-- Sources: transverse line (along x), longitudinal line (along y), circular spot, broad rectangular backlight. Source–detector longitudinal offset can be changed.
-- Source rays follow independent Gaussian x/y slopes around +z, with separately adjustable divergence standard deviations. The model is not an optical design calculation of the real SCHOTT cylindrical lens. **A narrow focused line is not necessarily collimated**.
-- An idealised receiver measures rays leaving the *top* shell, projects them onto a plane just above the egg, accepts only those within a chosen angular half-cone and within a finite y-width line. This approximates a telecentric line receiver, **not a calibrated camera lens or spectrograph**.
-- Perfect suppression of illumination bypassing the egg is assumed.
+**Test status, November 2026:** The backend-independent configuration, geometry, source and readout tests pass locally. GPU transport and the analytical slab tests were **not executed in the authoring environment**, because neither PMCX nor a supported GPU was available. The MCX test file is intentionally skipped without `RUN_MCX_PHYSICS=1`. The above commands are provided so you can run the definitive engine checks on your workstation. No fictitious transport validation or simulated camera images are reported.
 
-## Model / optical parameters
+## Known optical properties
 
-Geometry is nested concentric ellipsoids for shell/albumen and an offset ellipsoid for yolk, plus an optional spherical synthetic blood inclusion. Refractive-index jumps are calculated via Fresnel and Snell; volume scattering via the **Henyey–Greenstein phase function**, with absorption along paths. Single wavelength per run; the `wavelength` entry alone does **not** change the physics unless optical coefficients are supplied or edited.
+At 800 nm only, albumen and yolk values are derived from Tamura et al. (2026) as used in the previous version:
 
-The **only literature-anchored numbers** supplied in code are Tamura et al. (2026), **800 nm**:
-
-| Tissue | μa (mm⁻¹) | μs (mm⁻¹) | g |
+| Region | μa (mm⁻¹) | μs (mm⁻¹) | g |
 |---|---:|---:|---:|
 | Albumen | 0.006 | 0.069 | 0.90 |
 | Yolk | 0.014 | 5.350 | 0.92 |
 
-All shell, artificial-blood inclusion and refractive-index parameters are **illustrative placeholders**, *not measurements*. No 400–1700 nm curves are bundled. **Without an optical-property CSV, the 800 nm coefficients are reused unchanged at other wavelengths, which is only a what-if experiment.** Actual spectral predictions require measured μa(λ), μs(λ), g(λ), n(λ) for each tissue, the source spectrum and detector response.
+The shell and synthetic blood parameters and *all* default refractive indices are illustrative assumptions. A wavelength selector without a property CSV does not change these coefficients and should not be interpreted as a real 1200/1500 nm prediction.
 
-For measured data, upload a CSV to the UI or use `--spectra-csv your_measurements.csv`. Header:
+CSV schema:
 
 ```csv
 wavelength_nm,material,mu_a_mm_1,mu_s_mm_1,g,n
 ```
 
-Supply one row per wavelength for each of `Shell`, `Albumen`, `Yolk`, and `Blood spot`. Wavelengths must span the requested simulation band for **every** tissue. Interpolation inside the supplied range is linear; extrapolation is explicitly rejected. There is no fictional measured 1450 nm default.
-
-## Interpretation and convergence
-
-The app shows side-by-side (1) detected photon density and (2) ideal geometric material projections. The second view is **ground truth, not what the camera sees**. Roughness and shell porosity are not currently included; the egg boundaries are ideal smooth ellipsoids. A large dark central region in the Monte Carlo image **does not prove accurate yolk-boundary retrieval**.
-
-Performance tips:
-
-- Begin with ~8k packets × 40 lines and 64 camera pixels. Expect visible stochastic noise.
-- For more rigorous comparisons use 50k–100k packets per line, repeat with independent seeds, and check convergence of profiles / contrast before interpreting shapes.
-- Tighter angular detector acceptance and thinner line widths substantially reduce Monte Carlo collection efficiency. The small sample preview is **not** a high-fidelity instrument simulation.
-- Equal emitted photons are **not equal radiant power** or irradiance at the lower shell; for physical comparisons, calibrate the effective source area, angular emission, spectral lamp power and camera throughput.
-- `max_scattering_events` truncates rare long trajectories; monitor the warning/diagnostics. Refraction and shell scattering are simplified; finite focal length, polarization, egg shape asymmetry and internal interfaces are not represented in detail.
-
-## Research sources and library foundation
-
-1. **Tamura et al. (2026)**, *Light propagation in an intact egg: Combining bulk optical properties measurements with Monte Carlo simulations*, Journal of Food Engineering. DOI: [10.1016/j.jfoodeng.2026.113182](https://doi.org/10.1016/j.jfoodeng.2026.113182). Reported μa, μs, g for albumen/yolk at 800 nm; also demonstrates voxel-based MC simulation of the egg.
-2. **Wang, Jacques & Zheng (1995)**, *MCML — Monte Carlo modeling of light transport in multi-layered tissues*, Computer Methods and Programs in Biomedicine 47(2), 131–146. DOI: [10.1016/0169-2607(95)01640-F](https://doi.org/10.1016/0169-2607(95)01640-F). Standard Monte Carlo framework for scattering tissue.
-3. **Fang & Boas (2009)**, *Monte Carlo simulation of photon migration in 3D turbid media accelerated by graphics processing units*, Optics Express. DOI: [10.1364/OE.17.020178](https://doi.org/10.1364/OE.17.020178). Validated photon transport reference for **MCX**: https://github.com/fangq/mcx
-4. **Naglič et al. (2022)**, *MCDataset: a public reference dataset of Monte Carlo simulated quantities for multilayered and voxelated tissues…*, Journal of Biomedical Optics. DOI: [10.1117/1.JBO.27.8.083012](https://doi.org/10.1117/1.JBO.27.8.083012). **PyXOpto**: https://github.com/xopto/pyxopto
-5. **Ahmed et al. (2026)**, *Hyperspectral imaging dataset for non-destructive fertility and structural evaluation of chicken eggs*, Scientific Data. https://www.nature.com/articles/s41597-026-06556-1 — relevant pushbroom/transillumination experiment.
-
-**For quantitative scientific publication:** Treat this tool as a geometry/illumination hypothesis generator. Benchmark transport and boundary behavior against MCX/PyXOpto, measure the actual egg optical properties over 400–1700 nm, photograph the SCHOTT beam profiles at several heights, model camera pupil/NA/spectral sensitivity, and validate the apparent contour against opened-egg or MRI ground truth.
+Provide **Shell**, **Albumen**, **Yolk**, **Blood spot** rows for each wavelength; interpolation only, never extrapolation. Air is fixed analytically.
 
 ## Files
 
-- `eggtrans/core.py`: physical transport and geometry kernel (Numba)
-- `eggtrans/spectra.py`: optical-property input and interpolation
-- `app.py`: interactive Streamlit viewer
-- `eggtrans/cli.py`: batch runs and PNG/SVG/NPZ output
-- `tests/`: smoke, geometry, reproducibility, spectral import tests
+- `app.py`: Streamlit UI and plots
+- `eggtrans/core.py`: egg geometry, shared dataclasses, and public entry point only (**no custom photon transport**)
+- `eggtrans/mcx_engine.py`: PMCX configuration, voxel-label setup, photo exit-face readout, known-answer phantoms
+- `eggtrans/schematic.py`: interactive top/side views tied to MCX source parameters
+- `eggtrans/verify_physics.py`: execute the reference phantoms using real MCX
+- `eggtrans/spectra.py`: measured spectral CSV support
+- `eggtrans/cli.py`: batch run using same MCX entry point
+- `eggtrans/mcx_export.py`: export inspectable **PMCX** inputs sharing the same source definitions; not a second transport engine
+- `tests/`: source geometry, mapping, detector readout and optional GPU MCX reference tests
 
-## Optional export for validated MCX photon transport
+Previous illustrated reports under `reports/` are retained as **historical v0.1–v0.3 results generated with the *retired custom* kernel**, not as new MCX predictions. The old batch scripts in `scripts/` are historical as well; use the new Streamlit app or `python -m eggtrans.cli` for future MCX simulations.
 
-An **independent cross-check** can be prepared as MCX-compatible voxel labels and JSON inputs with:
+## Primary open-source sources
 
-```bash
-python -m eggtrans.mcx_export --output results/mcx_case --voxel-mm 0.5 --scan-lines 24 --mode "Transverse line" --photons 10000000
-cd results/mcx_case
-mcx -f scan_000.json -G 1
-```
-
-This export uses the verified open-source [MCX format](https://github.com/fangq/mcx) (`Domain.Media`, x/y/z uint8 labels in column-major order, `Optode` source, output settings) and creates one JSON input for each scan position. **The generated MCX inputs and voxel maps have been structurally tested, but have not been executed against MCX in this environment**, because the MCX GPU executable was not installed. A full MCX camera image still requires extracting the detected photons' saved exit positions/directions (`SaveDataMask: DPXVW`) and applying a real lens/line-pupil model. MCX `flux` is *not* camera irradiance. The exporter currently uses collimated planar/disk sources and does not reproduce the independent x/y angular divergence sliders.
-
-For accurate shell thickness, reduce voxel size to ≤0.25 mm (at the cost of memory). The fast Numba simulator remains the functioning interactive preview, not a substitute for independent MCX validation.
+- [MCX: Fang & Boas (2009), GPU-accelerated Monte Carlo photon transport](https://doi.org/10.1364/OE.17.020178) and [MCX repository / current documentation](https://github.com/fangq/mcx)
+- [PMCX: official Python bindings](https://pypi.org/project/pmcx/)
+- [MCX source types and upper-face detectors](https://github.com/fangq/mcx/blob/master/mcxlab/README.txt)
+- [Tamura et al. (2026), egg optical properties](https://doi.org/10.1016/j.jfoodeng.2026.113182)
+- [PyXOpto](https://github.com/xopto/pyxopto) is another established alternative but is not used here; mixing two transport engines would make validation and reproducibility more complex.
