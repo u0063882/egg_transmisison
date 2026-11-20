@@ -22,6 +22,7 @@ class VoxelDomain:
     grid_mm: float
     origin_mm: tuple[float,float,float]
     props: np.ndarray
+    plan: "DomainPlan | None" = None
 
     @property
     def dims(self) -> tuple[int,int,int]:
@@ -34,27 +35,117 @@ class VoxelDomain:
         return np.asarray(xyz,dtype=float)*self.grid_mm+np.asarray(self.origin_mm)
 
 
-def build_egg_volume(g: Geometry, o: Optics, materials: np.ndarray) -> VoxelDomain:
-    """Rasterize anatomical labels only. All photon transport belongs to MCX.
+@dataclass(frozen=True)
+class DomainPlan:
+    """Preflight geometry estimate: dimensions/limits without allocating voxels.
 
-    Air is a NONZERO material inside the MCX domain so launched photons can
-    cross source clearance and continue through the egg before leaving +z.
+    host_build_estimate_mib is an approximate upper-range planning allowance for
+    Python temporary arrays during ellipsoid rasterization, not a GPU forecast.
+    The 1-byte/voxel labels and detector buffers are reported separately.
     """
-    validate(g,o,materials)
-    v=o.voxel_mm
-    margin_x=max(12.,o.line_length_mm/2+o.line_width_mm/2-g.egg_width_mm/2+8.,o.spot_diameter_mm)
-    # Entire area of source, including broad/longitudinal extent, must remain
-    # in domain over all scan positions.
-    half_scan = (g.egg_length_mm/2)*1.08 if o.camera_mode == 'Pushbroom' else 0.
-    extent_y=max(o.line_length_mm/2, o.spot_diameter_mm/2, o.line_width_mm/2)
-    margin_y=max(12.,half_scan+abs(o.source_offset_y_mm)+extent_y-g.egg_length_mm/2+8.)
-    full_xyz=np.array([g.egg_width_mm+2*margin_x,
-                       g.egg_length_mm+2*margin_y,
-                       g.egg_height_mm+o.source_gap_mm+o.camera_plane_gap_mm+4*v])
-    dims=np.ceil(full_xyz/v).astype(int)
-    if np.prod(dims,dtype=np.int64)>12_000_000:
-        raise ValueError('MCX voxel domain too large (>12 million voxels). Use a coarser voxel size.')
-    origin=(-dims[0]*v/2.,-dims[1]*v/2.,-g.egg_height_mm/2-o.source_gap_mm-2*v)
+    dims: tuple[int, int, int]
+    origin_mm: tuple[float, float, float]
+    voxel_size_mm: float
+    nvoxels: int
+    label_memory_mib: float
+    host_build_estimate_mib: float
+    detected_buffer_estimate_mib: float
+    domain_padding_mm: float
+    active_source_mode: str
+    acquisition: str
+    x_bounds_mm: tuple[float, float]
+    y_bounds_mm: tuple[float, float]
+
+    @property
+    def grid_mm(self) -> float:
+        return self.voxel_size_mm
+
+    def mm_to_voxel(self, xyz):
+        return (np.asarray(xyz,dtype=float)-np.asarray(self.origin_mm))/self.grid_mm
+
+
+def scan_positions_mm(g: Geometry, o: Optics) -> np.ndarray:
+    """Position of the source/detector pair in the egg-relative coordinate frame."""
+    if o.camera_mode == 'Area':
+        return np.array([0.], dtype=float)
+    return np.linspace(-g.egg_length_mm*.54, g.egg_length_mm*.54, o.scan_lines)
+
+
+def domain_plan(g: Geometry, o: Optics, materials: np.ndarray = MATERIALS_800,
+                *, enforce_budget: bool = True) -> DomainPlan:
+    """Source-specific bounded air volume, sized once for a complete scan.
+
+    Include the egg, camera FOV, and the *active* MCX source at both endpoints
+    of its motion. All sources move linearly along y, so endpoints suffice.
+    For directional/divergent light, lateral padding is a user-controlled
+    modelling parameter: a larger value may be needed to avoid lost photons.
+    Never change the selected voxel size silently.
+    """
+    validate(g, o, materials)
+    x_half_cam = g.egg_width_mm * .56
+    y_half_cam = g.egg_length_mm * .54
+    v = float(o.voxel_mm)
+    xlo = -max(g.egg_width_mm/2, x_half_cam)
+    xhi = max(g.egg_width_mm/2, x_half_cam)
+    y_extent = y_half_cam + (o.camera_line_width_mm/2 if o.camera_mode == 'Pushbroom' else 0.)
+    ylo = -max(g.egg_length_mm/2, y_extent)
+    yhi = max(g.egg_length_mm/2, y_extent)
+
+    # The exact configured footprint, not the largest *available* mode.
+    for scan_y in (float(scan_positions_mm(g,o)[0]), float(scan_positions_mm(g,o)[-1])):
+        fp = source_footprint_mm(o, scan_y)
+        if fp['kind'] == 'circle':
+            source_bounds=(fp['cx']-fp['radius'],fp['cx']+fp['radius'],
+                           fp['cy']-fp['radius'],fp['cy']+fp['radius'])
+        else:
+            source_bounds=(fp['xmin'],fp['xmax'],fp['ymin'],fp['ymax'])
+        sx0,sx1,sy0,sy1=source_bounds
+        xlo=min(xlo,sx0); xhi=max(xhi,sx1)
+        ylo=min(ylo,sy0); yhi=max(yhi,sy1)
+
+    padding=float(o.domain_padding_mm)
+    xlo-=padding; xhi+=padding
+    ylo-=padding; yhi+=padding
+    # Preserve the original launch plane and camera/top-face clearances.
+    zlo = -g.egg_height_mm/2 - o.source_gap_mm - 2*v
+    zsize = g.egg_height_mm + o.source_gap_mm + o.camera_plane_gap_mm + 4*v
+    dims=tuple(int(np.ceil(d/v)) for d in (xhi-xlo,yhi-ylo,zsize))
+    nvoxels=int(np.prod(dims,dtype=np.int64))
+    mib=1024.**2
+    # Approximate in-memory Python masks and temporaries. MCX's GPU scratch
+    # and photon records are device/build-specific and *not* certified here.
+    label_mib=nvoxels/mib  # uint8 MCX label volume
+    host_mib=16*nvoxels/mib  # conservative working bound (rough, NOT guaranteed)
+    detector_mib=48*int(o.photons_per_line)/mib  # conservative per saved photon, varies with MCX
+    plan=DomainPlan(dims=dims,origin_mm=(float(xlo),float(ylo),float(zlo)),
+                    voxel_size_mm=v,nvoxels=nvoxels,label_memory_mib=label_mib,
+                    host_build_estimate_mib=host_mib,
+                    detected_buffer_estimate_mib=detector_mib,
+                    domain_padding_mm=padding,active_source_mode=o.mode,
+                    acquisition=o.camera_mode,
+                    x_bounds_mm=(float(xlo),float(xlo+dims[0]*v)),
+                    y_bounds_mm=(float(ylo),float(ylo+dims[1]*v)))
+    if enforce_budget and host_mib > o.domain_build_budget_mib:
+        raise ValueError(
+            f'Estimated domain build working memory {host_mib:.0f} MiB exceeds '
+            f'the configured {o.domain_build_budget_mib:.0f} MiB safety budget '
+            f'({dims[0]} × {dims[1]} × {dims[2]} = {nvoxels:,} voxels). '
+            'Increase the host-build budget if RAM is available, or decrease padding '
+            'after checking convergence. Do not reduce voxel resolution without consideration.')
+    return plan
+
+
+def build_egg_volume(g: Geometry, o: Optics, materials: np.ndarray) -> VoxelDomain:
+    """Rasterize anatomy into an MCX label volume; all transport belongs to MCX.
+
+    Air is a nonzero material within the domain. A configurable padded domain
+    reduces artificial side exits; run a padding-convergence study before
+    treating transmitted intensity as physically independent of box size.
+    """
+    plan=domain_plan(g,o,materials)
+    v=plan.voxel_size_mm
+    dims=plan.dims
+    origin=plan.origin_mm
     # output voxel centers; x/y meshgrid convention consistent with MCX [x,y,z]
     xs=origin[0]+(np.arange(dims[0])+0.5)*v
     ys=origin[1]+(np.arange(dims[1])+0.5)*v
@@ -75,7 +166,7 @@ def build_egg_volume(g: Geometry, o: Optics, materials: np.ndarray) -> VoxelDoma
         vol[blood & inner]=5
     # 0 is MCX exterior medium, 1 is volume air; duplicate air props.
     props=np.vstack([materials[0],materials]).astype(np.float32)
-    return VoxelDomain(np.asfortranarray(vol),v,tuple(map(float,origin)),props)
+    return VoxelDomain(np.asfortranarray(vol),v,tuple(map(float,origin)),props,plan)
 
 
 def source_footprint_mm(o: Optics, scan_y_mm: float=0.) -> dict:
@@ -94,7 +185,7 @@ def source_footprint_mm(o: Optics, scan_y_mm: float=0.) -> dict:
     return {'kind':'rectangle','xmin':-sx/2,'xmax':sx/2,'ymin':cy-sy/2,'ymax':cy+sy/2}
 
 
-def source_config(domain: VoxelDomain,o: Optics,scan_y_mm: float) -> dict:
+def source_config(domain: VoxelDomain | DomainPlan, o: Optics, scan_y_mm: float) -> dict:
     """Native MCX disk or planar sources; never silently approximate spot by line."""
     footprint=source_footprint_mm(o,scan_y_mm)
     # physical launch plane: 1 voxel inside the bottom of MCX air volume
@@ -254,8 +345,7 @@ def simulate_mcx(g: Geometry, o: Optics, materials: np.ndarray, run_backend=None
         image = np.zeros((o.area_rows, o.camera_pixels), dtype=float)
         positions = [0.]       # single exposure of a stationary egg and source
     else:
-        y_mm = np.linspace(-g.egg_length_mm * .54,
-                           g.egg_length_mm * .54, o.scan_lines)
+        y_mm = scan_positions_mm(g, o)
         image = np.zeros((o.scan_lines, o.camera_pixels), dtype=float)
         positions = y_mm      # move the source/camera pair across the egg
 
@@ -297,7 +387,8 @@ def simulate_mcx(g: Geometry, o: Optics, materials: np.ndarray, run_backend=None
                             'weighted_camera_signal': captured_weight,
                             'fraction_collected': captured_weight / launched,
                             'voxel_size_mm': domain.grid_mm, 'volume_shape': domain.dims,
-                            'source_type': source_config(domain, o, 0)['srctype']}}
+                            'source_type': source_config(domain, o, 0)['srctype'],
+                            'domain_plan': asdict(domain.plan)}}
 
 
 def homogeneous_slab_config(mu_a_mm1:float=0.07,thickness_mm:int=12,nphotons:int=30_000)->dict:
