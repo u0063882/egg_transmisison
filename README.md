@@ -1,4 +1,4 @@
-# Egg transmission simulator — v0.5 (MCX)
+# Egg transmission simulator — v0.5.1 (MCX)
 
 **Python · Streamlit · validated MCX photon-transport engine through `pmcx` · pushbroom line-scan **or stationary 2D area camera**
 
@@ -24,8 +24,8 @@ python -m streamlit run app.py
 
 ## Camera modes
 
-The Streamlit sidebar now offers **Camera type: Pushbroom (line scan)** or
-**Normal camera (2D area)**. Both rely exclusively on the established MCX
+The Streamlit **main page**, immediately below its title, now offers **Camera type: Pushbroom (line scan)** or
+**Normal camera (2D area)**. It shows **App v0.5.1** at the top to identify a fresh checkout. The sidebar retains the illumination controls. Both rely exclusively on the established MCX
 photon transport engine through PMCX; only the detector readout and source
 movement differ.
 
