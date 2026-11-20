@@ -63,6 +63,8 @@ class Optics:
     camera_pixels: int = 64
     area_rows: int = 96
     voxel_mm: float = 0.5
+    domain_padding_mm: float = 8.0  # lateral air margin beyond active egg/source/detector envelope
+    domain_build_budget_mib: float = 512.0  # conservative *host* rasterization budget, not GPU allocation
     seed: int = 42
     gpu_id: int = 1
 
@@ -93,6 +95,10 @@ def validate(g: Geometry, o: Optics, materials: np.ndarray) -> None:
     if min(o.line_length_mm,o.line_width_mm,o.spot_diameter_mm,o.source_gap_mm,
            o.camera_plane_gap_mm,o.camera_line_width_mm,o.voxel_mm) <= 0:
         raise ValueError('Widths, distances and voxel size must be positive.')
+    if not np.isfinite(o.domain_padding_mm) or o.domain_padding_mm < max(2*o.voxel_mm, 0.01):
+        raise ValueError('Domain padding must be finite and >= 2 voxels. Increase padding.')
+    if not np.isfinite(o.domain_build_budget_mib) or o.domain_build_budget_mib < 32:
+        raise ValueError('Domain build safety budget must be finite and at least 32 MiB.')
     if not (0 < o.camera_half_angle_deg < 90):
         raise ValueError('Camera half-angle must be 0–90° (exclusive).')
     if min(o.scan_lines,o.camera_pixels,o.area_rows,o.photons_per_line) < 1 or o.gpu_id < 1:
