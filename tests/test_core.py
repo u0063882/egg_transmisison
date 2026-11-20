@@ -107,9 +107,9 @@ class StubPMCX:
         p=np.array([[cfg['vol'].shape[0]/2,sy,cfg['vol'].shape[2]],
                     [cfg['vol'].shape[0]/2,sy+20,cfg['vol'].shape[2]]])
         v=np.array([[0.,0.,1.],[0.,0.,1.]])
-        return {'detp':{'p':p,'v':v}}
+        return {'detp':{'p':p,'v':v,'ppath':np.tile([0.,.5,2.,0.,0.],(len(p),1))}}
     @staticmethod
-    def detweight(d,p):
+    def detweight(d,p,unitinmm=None):
         return np.ones(2)
 
 
