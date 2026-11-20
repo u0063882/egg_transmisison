@@ -58,6 +58,8 @@ class Optics:
     beam_focal_length_mm: float = 0.0
     camera_half_angle_deg: float = 35.0
     camera_line_width_mm: float = 4.0
+    camera_path_mode: Literal['All exits', 'Traversed egg', 'Traversed interior'] = 'Traversed egg'
+    min_egg_path_mm: float = 0.0  # diagnostic history gate; not a physical baffle
     photons_per_line: int = 100_000
     scan_lines: int = 24
     camera_pixels: int = 64
@@ -99,6 +101,10 @@ def validate(g: Geometry, o: Optics, materials: np.ndarray) -> None:
         raise ValueError('Domain padding must be finite and >= 2 voxels. Increase padding.')
     if not np.isfinite(o.domain_build_budget_mib) or o.domain_build_budget_mib < 32:
         raise ValueError('Domain build safety budget must be finite and at least 32 MiB.')
+    if o.camera_path_mode not in ('All exits', 'Traversed egg', 'Traversed interior'):
+        raise ValueError('Invalid camera path mode.')
+    if not np.isfinite(o.min_egg_path_mm) or o.min_egg_path_mm < 0:
+        raise ValueError('Minimum egg path length must be finite and >= 0 mm.')
     if not (0 < o.camera_half_angle_deg < 90):
         raise ValueError('Camera half-angle must be 0–90° (exclusive).')
     if min(o.scan_lines,o.camera_pixels,o.area_rows,o.photons_per_line) < 1 or o.gpu_id < 1:
