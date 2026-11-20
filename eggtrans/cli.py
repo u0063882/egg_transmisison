@@ -1,4 +1,4 @@
-"""Batch CLI to run a scan without Streamlit.
+"""Batch CLI to simulate a pushbroom scan or stationary 2D area-camera exposure.
 
 python -m eggtrans.cli --photons 12000 --lines 64 --mode "Transverse line" --output results/demo
 """
@@ -19,6 +19,8 @@ def main() -> None:
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--config',type=Path,help='JSON with geometry, optics, materials and wavelength_nm')
     p.add_argument('--mode',choices=MODE_NAMES,default=None)
+    p.add_argument('--camera',choices=('Pushbroom','Area'),default=None)
+    p.add_argument('--area-rows',type=int,default=None)
     p.add_argument('--photons',type=int,default=None)
     p.add_argument('--lines',type=int,default=None)
     p.add_argument('--pixels',type=int,default=None)
@@ -30,6 +32,8 @@ def main() -> None:
     g=Geometry(**cfg.get('geometry',{}))
     o=Optics(**cfg.get('optics',{}))
     if args.mode: o.mode=args.mode
+    if args.camera: o.camera_mode=args.camera
+    if args.area_rows: o.area_rows=args.area_rows
     if args.photons: o.photons_per_line=args.photons
     if args.lines: o.scan_lines=args.lines
     if args.pixels: o.camera_pixels=args.pixels
@@ -52,7 +56,7 @@ def main() -> None:
     axes[1].imshow(truth,origin='lower',extent=extent,aspect='equal',cmap='viridis',vmin=0,vmax=3)
     axes[1].set_title('True projected materials (not observable)')
     for ax in axes:
-        ax.set_xlabel('Across egg x (mm)');ax.set_ylabel('Translation y (mm)')
+        ax.set_xlabel('Across egg x (mm)');ax.set_ylabel('y (mm)' if o.camera_mode == 'Area' else 'Translation y (mm)')
     fig.savefig(str(args.output)+'.png',dpi=180)
     fig.savefig(str(args.output)+'.svg')
     plt.close(fig)

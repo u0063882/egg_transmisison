@@ -34,3 +34,16 @@ def test_mcx_native_sources_reproduce_expected_exit_footprints():
     r=run_source_shape_reference()
     assert 0.85 < r['Spot']['aspect_x_over_y'] < 1.15,r
     assert r['Transverse line']['aspect_x_over_y'] > 10.,r
+
+@pytest.mark.gpu
+def test_mcx_area_camera_preserves_known_spot_vs_line_footprint():
+    """Known-answer image from actual MCX in a transparent slab, not stubbed."""
+    if os.environ.get('RUN_MCX_PHYSICS')!='1':
+        pytest.skip('Requires explicit RUN_MCX_PHYSICS=1 and NVIDIA GPU.')
+    ok, message=backend_status()
+    if not ok: pytest.skip(message)
+    from eggtrans.mcx_engine import run_area_camera_source_reference
+    r=run_area_camera_source_reference()
+    assert .85 < r['Spot']['aspect_x_over_y'] < 1.15, r
+    assert r['Transverse line']['aspect_x_over_y'] > 10., r
+    assert all(v['weighted_flux']>.95 for v in r.values()), r

@@ -3,7 +3,7 @@
 All photon physics is performed by the established MCX engine through `pmcx`.
 This module DOES NOT compute optical paths or simulate scattering. MCX records
 photons exiting the +z domain face; Python bins them into a moving pushbroom
-receiver's slit and angular acceptance.
+receiver's slit and angular acceptance, or into a stationary 2D area image.
 
 MCX docs: https://github.com/fangq/mcx, `mcxlab/README.txt`.
 """
@@ -45,7 +45,7 @@ def build_egg_volume(g: Geometry, o: Optics, materials: np.ndarray) -> VoxelDoma
     margin_x=max(12.,o.line_length_mm/2+o.line_width_mm/2-g.egg_width_mm/2+8.,o.spot_diameter_mm)
     # Entire area of source, including broad/longitudinal extent, must remain
     # in domain over all scan positions.
-    half_scan = (g.egg_length_mm/2)*1.08
+    half_scan = (g.egg_length_mm/2)*1.08 if o.camera_mode == 'Pushbroom' else 0.
     extent_y=max(o.line_length_mm/2, o.spot_diameter_mm/2, o.line_width_mm/2)
     margin_y=max(12.,half_scan+abs(o.source_offset_y_mm)+extent_y-g.egg_length_mm/2+8.)
     full_xyz=np.array([g.egg_width_mm+2*margin_x,
@@ -199,47 +199,105 @@ def camera_bin(p:np.ndarray,v:np.ndarray,weights:np.ndarray,domain:VoxelDomain,
     return hits,int(np.count_nonzero(keep))
 
 
-def simulate_mcx(g: Geometry,o: Optics,materials:np.ndarray,run_backend=None) -> dict:
-    """One PMCX run for every scan position; never calls custom photon kernel.
+def camera_bin_area(p: np.ndarray, v: np.ndarray, weights: np.ndarray,
+                    domain: VoxelDomain, o: Optics,
+                    y_edges_mm: np.ndarray, x_edges_mm: np.ndarray) -> tuple[np.ndarray, int]:
+    """Stationary telecentric-like area detector, one 2D exposure.
 
-    Optional injected backend is only for deterministic config/unit testing.
-    Production uses pmcx.mcxlab and pmcx.detweight.
+    Bin MCX *exit-face photon positions* to [y,x] with a direction gate.
+    This is geometric readout only. It is not a physical lens, pupil, PSF,
+    or a camera looking at the egg from a finite perspective distance.
     """
-    validate(g,o,materials)
+    shape = (len(y_edges_mm)-1, len(x_edges_mm)-1)
+    if len(p) == 0:
+        return np.zeros(shape, dtype=float), 0
+    xyz = domain.voxel_to_mm(p)
+    theta = np.rad2deg(np.arctan2(np.hypot(v[:, 0], v[:, 1]), v[:, 2]))
+    keep = (v[:, 2] > 0) & (theta <= o.camera_half_angle_deg)
+    keep &= (xyz[:, 0] >= x_edges_mm[0]) & (xyz[:, 0] <= x_edges_mm[-1])
+    keep &= (xyz[:, 1] >= y_edges_mm[0]) & (xyz[:, 1] <= y_edges_mm[-1])
+    image, _, _ = np.histogram2d(xyz[keep, 1], xyz[keep, 0],
+                                bins=(y_edges_mm, x_edges_mm), weights=weights[keep])
+    return image, int(np.count_nonzero(keep))
+
+
+def simulate_mcx(g: Geometry, o: Optics, materials: np.ndarray, run_backend=None) -> dict:
+    """Execute MCX photon physics for either line-scan or area imaging.
+
+    - Pushbroom: one MCX run per y scan position, stationary detector/source
+      pair in the lab (translated together relative to the simulated egg).
+    - Area: one MCX run at the fixed source position, all x/y exit pixels
+      sampled simultaneously, no egg translation and no observation slit.
+
+    The optional injected backend is for unit tests, not an alternative
+    physical simulator; real runs always use official pmcx.mcxlab.
+    """
+    validate(g, o, materials)
     if run_backend is None:
         try:
             import pmcx as run_backend
-        except (ImportError,OSError) as exc:
-            raise RuntimeError('PMCX is required. Install `pip install pmcx` on an NVIDIA/CUDA system. No custom fallback is used.') from exc
-        available,message=backend_status()
-        if not available: raise RuntimeError(message)
-    domain=build_egg_volume(g,o,materials)
-    y_mm=np.linspace(-g.egg_length_mm*.54,g.egg_length_mm*.54,o.scan_lines)
-    xlim=g.egg_width_mm*.56
-    x_edges=np.linspace(-xlim,xlim,o.camera_pixels+1)
-    image=np.zeros((o.scan_lines,o.camera_pixels),dtype=float)
-    exit_total=0; capture_total=0; captured_weight=0.
-    for i,sy in enumerate(y_mm):
-        cfg=mcx_config(domain,o,float(sy),max(1,(int(o.seed)+i)%2147483647))
+        except (ImportError, OSError) as exc:
+            raise RuntimeError('PMCX is required; install `pip install pmcx` on an NVIDIA/CUDA system. No custom fallback.') from exc
+        available, message = backend_status()
+        if not available:
+            raise RuntimeError(message)
+
+    domain = build_egg_volume(g, o, materials)
+    x_edges = np.linspace(-g.egg_width_mm * .56, g.egg_width_mm * .56,
+                          o.camera_pixels + 1)
+    x_mm = .5 * (x_edges[:-1] + x_edges[1:])
+    area = o.camera_mode == 'Area'
+    if area:
+        y_edges = np.linspace(-g.egg_length_mm * .54, g.egg_length_mm * .54,
+                              o.area_rows + 1)
+        y_mm = .5 * (y_edges[:-1] + y_edges[1:])
+        image = np.zeros((o.area_rows, o.camera_pixels), dtype=float)
+        positions = [0.]       # single exposure of a stationary egg and source
+    else:
+        y_mm = np.linspace(-g.egg_length_mm * .54,
+                           g.egg_length_mm * .54, o.scan_lines)
+        image = np.zeros((o.scan_lines, o.camera_pixels), dtype=float)
+        positions = y_mm      # move the source/camera pair across the egg
+
+    exit_total = 0
+    capture_total = 0
+    captured_weight = 0.
+    for i, sy in enumerate(positions):
+        cfg = mcx_config(domain, o, float(sy), max(1, (int(o.seed)+i) % 2147483647))
         try:
-            output=run_backend.mcxlab(cfg)
+            result = run_backend.mcxlab(cfg)
         except Exception as exc:
-            raise RuntimeError(f'MCX failed on scan line {i+1}/{o.scan_lines}: {exc}') from exc
-        detp=output.get('detp') if isinstance(output,dict) else None
+            raise RuntimeError(f'MCX failed on {"area exposure" if area else f"scan line {i+1}/{o.scan_lines}"}: {exc}') from exc
+        detp = result.get('detp') if isinstance(result, dict) else None
         if detp is None:
-            raise RuntimeError('MCX did not return detected photons. Ensure +z face detection is supported by installed MCX.')
-        p,v,w=top_face_photons(detp,domain.props,run_backend)
-        line,n_camera=camera_bin(p,v,w,domain,o,float(sy),x_edges)
-        image[i,:]=line/float(o.photons_per_line)
-        exit_total+=len(p);capture_total+=n_camera;captured_weight+=float(np.sum(line))
-    return {'image':image, 'x_mm':(x_edges[:-1]+x_edges[1:])/2.,'scan_y_mm':y_mm,
-            'geometry':asdict(g),'optics':asdict(o),'materials':materials.copy(),
-            'diagnostics':{'engine':'MCX via PMCX','launched_photons':int(o.photons_per_line*o.scan_lines),
-                           'top_exit_photons':exit_total,'camera_accepted_photons':capture_total,
-                           'weighted_camera_signal':captured_weight,
-                           'fraction_collected':captured_weight/(o.photons_per_line*o.scan_lines),
-                           'voxel_size_mm':domain.grid_mm, 'volume_shape':domain.dims,
-                           'source_type':source_config(domain,o,0)['srctype']}}
+            raise RuntimeError('MCX returned no detected photon dictionary; check +z face detection.')
+        p, v, w = top_face_photons(detp, domain.props, run_backend)
+        if area:
+            image, n_camera = camera_bin_area(p, v, w, domain, o, y_edges, x_edges)
+            captured_weight += float(image.sum())
+        else:
+            line, n_camera = camera_bin(p, v, w, domain, o, float(sy), x_edges)
+            image[i, :] = line
+            captured_weight += float(line.sum())
+        exit_total += len(p)
+        capture_total += n_camera
+
+    # Same intensity convention as the line scan: each row/exposure is
+    # weighted photon energy per launched packet, NOT radiant power per area.
+    image /= float(o.photons_per_line)
+    launched = int(o.photons_per_line * len(positions))
+    return {'image': image, 'x_mm': x_mm, 'y_mm': y_mm,
+            'scan_y_mm': y_mm,  # backwards-compatible key for saved data
+            'camera_mode': o.camera_mode,
+            'geometry': asdict(g), 'optics': asdict(o), 'materials': materials.copy(),
+            'diagnostics': {'engine': 'MCX via PMCX', 'camera_mode': o.camera_mode,
+                            'mcx_runs': len(positions), 'photons_per_run': int(o.photons_per_line),
+                            'launched_photons': launched,
+                            'top_exit_photons': exit_total, 'camera_accepted_photons': capture_total,
+                            'weighted_camera_signal': captured_weight,
+                            'fraction_collected': captured_weight / launched,
+                            'voxel_size_mm': domain.grid_mm, 'volume_shape': domain.dims,
+                            'source_type': source_config(domain, o, 0)['srctype']}}
 
 
 def homogeneous_slab_config(mu_a_mm1:float=0.07,thickness_mm:int=12,nphotons:int=30_000)->dict:
@@ -307,3 +365,40 @@ def run_source_shape_reference(pmcx_module=None)->dict[str,dict]:
         sx=float(np.std(p[:,0]));sy=float(np.std(p[:,1]))
         out[name]={'exit_photons':len(p),'std_x_mm':sx,'std_y_mm':sy,'aspect_x_over_y':sx/max(sy,1e-12)}
     return out
+
+
+def run_area_camera_source_reference(pmcx_module=None) -> dict[str, dict]:
+    """Optional *real MCX* known-answer transmission of source footprints.
+
+    A transparent, index-matched, nonscattering block is illuminated from
+    below by a native MCX disk and plane. The one-shot area-camera image must
+    recover the disk and transverse stripe, respectively. This also tests the
+    area binning on actual MCX exit photons (not synthetic response packets).
+    """
+    if pmcx_module is None:
+        import pmcx as pmcx_module
+    result = {}
+    o = Optics(camera_mode='Area', camera_pixels=100, area_rows=100,
+               camera_half_angle_deg=30.)
+    dummy = VoxelDomain(vol=np.ones((100,100,24), dtype=np.uint8), grid_mm=1.,
+                        origin_mm=(0.,0.,0.), props=np.array([[0,0,1,1],[0,0,1,1]],dtype=np.float32))
+    edges = np.linspace(0.,100.,101)
+    xc = .5*(edges[:-1]+edges[1:])
+    yc = xc
+    for name, cfg in source_shape_reference_configs().items():
+        run = pmcx_module.mcxlab(cfg)
+        p,v,w = top_face_photons(run['detp'],cfg['prop'],pmcx_module)
+        im,n = camera_bin_area(p,v,w,dummy,o,edges,edges)
+        yy,xx = np.meshgrid(yc,xc,indexing='ij')
+        total = float(im.sum())
+        if total <= 0:
+            raise RuntimeError('Area-camera reference: no photons detected.')
+        mean_x = float((im*xx).sum()/total)
+        mean_y = float((im*yy).sum()/total)
+        vx = float((im*(xx-mean_x)**2).sum()/total)
+        vy = float((im*(yy-mean_y)**2).sum()/total)
+        result[name] = {'accepted_photons':n,'weighted_flux':total/float(cfg['nphoton']),
+                        'image_shape':list(im.shape), 'centroid_x_mm':mean_x,
+                        'centroid_y_mm':mean_y,
+                        'aspect_x_over_y':float(np.sqrt(vx/max(vy,1.e-12)))}
+    return result

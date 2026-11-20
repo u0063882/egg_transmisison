@@ -12,6 +12,7 @@ import numpy as np
 
 Mode = Literal['Transverse line', 'Spot', 'Longitudinal line', 'Broad backlight']
 MODE_NAMES: tuple[Mode, ...] = ('Transverse line', 'Spot', 'Longitudinal line', 'Broad backlight')
+CAMERA_MODES = ('Pushbroom', 'Area')
 MATERIAL_NAMES = ('Air', 'Shell', 'Albumen', 'Yolk', 'Blood spot')
 # [absorption 1/mm, scattering 1/mm, g, n] at 800 nm.
 # Literature anchors: albumen & yolk mua, mus, g ONLY; other numbers illustrative.
@@ -45,6 +46,7 @@ class Geometry:
 @dataclass
 class Optics:
     mode: Mode = 'Transverse line'
+    camera_mode: Literal['Pushbroom', 'Area'] = 'Pushbroom'
     line_length_mm: float = 48.0
     line_width_mm: float = 2.0
     spot_diameter_mm: float = 6.0
@@ -59,6 +61,7 @@ class Optics:
     photons_per_line: int = 100_000
     scan_lines: int = 24
     camera_pixels: int = 64
+    area_rows: int = 96
     voxel_mm: float = 0.5
     seed: int = 42
     gpu_id: int = 1
@@ -85,12 +88,14 @@ def validate(g: Geometry, o: Optics, materials: np.ndarray) -> None:
             raise ValueError('Blood inclusion must be inside the shell.')
     if o.mode not in MODE_NAMES:
         raise ValueError(f'Unknown source mode: {o.mode}')
+    if o.camera_mode not in CAMERA_MODES:
+        raise ValueError(f'Unknown camera mode: {o.camera_mode}')
     if min(o.line_length_mm,o.line_width_mm,o.spot_diameter_mm,o.source_gap_mm,
            o.camera_plane_gap_mm,o.camera_line_width_mm,o.voxel_mm) <= 0:
         raise ValueError('Widths, distances and voxel size must be positive.')
     if not (0 < o.camera_half_angle_deg < 90):
         raise ValueError('Camera half-angle must be 0–90° (exclusive).')
-    if min(o.scan_lines,o.camera_pixels,o.photons_per_line) < 1 or o.gpu_id < 1:
+    if min(o.scan_lines,o.camera_pixels,o.area_rows,o.photons_per_line) < 1 or o.gpu_id < 1:
         raise ValueError('Packet count, scan size and GPU ID must be positive.')
     if o.voxel_mm > min(g.shell_thickness_mm*10, 3):
         # Warn through UI; do not claim subvoxel physical shell accuracy.
@@ -109,7 +114,7 @@ def projected_masks(g: Geometry, x: np.ndarray, y: np.ndarray) -> dict[str,np.nd
 
 def simulate(geometry: Geometry | None = None, optics: Optics | None = None,
              materials: np.ndarray | None = None) -> dict:
-    """Run PMCX for each scan position. Requires installed PMCX + NVIDIA GPU."""
+    """Run PMCX in pushbroom or stationary 2D area-camera mode."""
     from .mcx_engine import simulate_mcx
     return simulate_mcx(geometry or Geometry(), optics or Optics(),
                         np.asarray(MATERIALS_800 if materials is None else materials))

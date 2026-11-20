@@ -26,12 +26,19 @@ def apparatus_figure(g:Geometry,o:Optics,scan_y_mm:float=0.)->go.Figure:
         fy=[fp['ymin'],fp['ymin'],fp['ymax'],fp['ymax'],fp['ymin']]
     f.add_trace(go.Scatter(x=fx,y=fy,fill='toself',fillcolor='rgba(239,151,52,.35)',
                            line=dict(color='#e88123',width=2),name=f'{o.mode} · MCX emitter'),1,1)
-    f.add_trace(go.Scatter(x=[-g.egg_width_mm*.57,g.egg_width_mm*.57],y=[scan_y_mm,scan_y_mm],
-                           mode='lines',line=dict(color='#0c9ee4',dash='dash',width=3),
-                           name='Detector line'),1,1)
-    f.add_annotation(x=g.egg_width_mm*.65,y=scan_y_mm+9,ax=g.egg_width_mm*.65,
-                     ay=scan_y_mm-5,arrowhead=3,arrowsize=1.4,arrowwidth=2,
-                     arrowcolor='#62748b',text='Translation ↑',row=1,col=1)
+    if o.camera_mode == 'Pushbroom':
+        f.add_trace(go.Scatter(x=[-g.egg_width_mm*.57,g.egg_width_mm*.57],
+                               y=[scan_y_mm,scan_y_mm], mode='lines',
+                               line=dict(color='#0c9ee4',dash='dash',width=3),
+                               name='Detector line'),1,1)
+        f.add_annotation(x=g.egg_width_mm*.65,y=scan_y_mm+9,ax=g.egg_width_mm*.65,
+                         ay=scan_y_mm-5,arrowhead=3,arrowsize=1.4,arrowwidth=2,
+                         arrowcolor='#62748b',text='Translation ↑',row=1,col=1)
+    else:
+        xf=g.egg_width_mm*.56; yf=g.egg_length_mm*.54
+        f.add_trace(go.Scatter(x=[-xf,xf,xf,-xf,-xf],y=[-yf,-yf,yf,yf,-yf],
+                               mode='lines',line=dict(color='#0c9ee4',dash='dash',width=3),
+                               name='Area camera FOV (2D)'),1,1)
 
     # side view of same egg in y-z coordinates; overlay source located beneath egg
     f.add_trace(go.Scatter(x=g.egg_length_mm/2*np.cos(t),y=g.egg_height_mm/2*np.sin(t),
@@ -50,12 +57,13 @@ def apparatus_figure(g:Geometry,o:Optics,scan_y_mm:float=0.)->go.Figure:
     top=g.egg_height_mm/2+o.camera_plane_gap_mm
     f.add_trace(go.Scatter(x=[source_min,source_max],y=[bottom,bottom],mode='lines',
                            line=dict(color='#e88123',width=7),showlegend=False),1,2)
-    f.add_trace(go.Scatter(x=[scan_y_mm-10,scan_y_mm+10],y=[top,top],mode='lines',
+    camera_half_width = 10. if o.camera_mode == 'Pushbroom' else g.egg_length_mm*.54
+    f.add_trace(go.Scatter(x=[scan_y_mm-camera_half_width,scan_y_mm+camera_half_width],y=[top,top],mode='lines',
                            line=dict(color='#0c9ee4',width=6),showlegend=False),1,2)
     for yy in np.linspace(source_min,source_max,3):
         f.add_trace(go.Scatter(x=[yy,yy],y=[bottom,-g.egg_height_mm*.2],mode='lines',
                                line=dict(color='rgba(238,150,36,.45)',width=2),showlegend=False),1,2)
-    f.add_annotation(x=scan_y_mm+12,y=top,text='Camera plane',showarrow=False,
+    f.add_annotation(x=scan_y_mm+12,y=top,text=('Line camera' if o.camera_mode == 'Pushbroom' else 'Area camera'),showarrow=False,
                      font=dict(size=11,color='#0c9ee4'),row=1,col=2)
     f.update_xaxes(title_text='Across x (mm)',scaleanchor='y',scaleratio=1,row=1,col=1)
     f.update_yaxes(title_text='Translation y (mm)',row=1,col=1)
