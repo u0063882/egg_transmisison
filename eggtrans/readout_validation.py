@@ -12,7 +12,7 @@ import numpy as np
 from .core import Geometry, Optics, MATERIALS_800, validate
 from .mcx_engine import (
     backend_status, build_egg_volume, mcx_config, top_face_photons,
-    camera_bin, camera_bin_area,
+    camera_bin, camera_bin_area, photon_history_mask,
 )
 
 
@@ -55,7 +55,10 @@ def compare_fixed_scene_readouts(
     output = backend.mcxlab(cfg)
     if not isinstance(output, dict) or 'detp' not in output:
         raise RuntimeError('PMCX did not return detected photons.')
-    p, v, w = top_face_photons(output['detp'], domain.props, backend)
+    p,v,w=top_face_photons(output['detp'],domain.props,backend,unitinmm=domain.grid_mm)
+    keep=photon_history_mask(output['detp'],len(p),o,domain.grid_mm,
+                             n_materials=domain.props.shape[0]-1)
+    p,v,w=p[keep],v[keep],w[keep]
     area, n_area = camera_bin_area(p, v, w, domain, o, y_edges, x_edges)
 
     # Match line slit width to the area pixel row pitch. This deliberately
