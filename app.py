@@ -16,7 +16,7 @@ from eggtrans.spectra import load_spectra_csv,at_wavelength
 
 st.set_page_config(page_title='Egg transmission · MCX',layout='wide',page_icon='🥚')
 st.title('Egg transmission · MCX / PMCX')
-st.caption('App v0.8.0 · MCX photon transport · camera selection is on this main page')
+st.caption('App v0.9.0 · MCX photon transport · camera selection is on this main page')
 st.subheader('Camera / acquisition')
 camera_mode=st.radio(
     'Camera type', CAMERA_MODES,
@@ -38,6 +38,21 @@ with st.sidebar:
     focal=0. if fchoice.startswith('Parallel') else st.slider('Focal distance magnitude (mm)',20.,250.,100.,10.)*(1 if fchoice.startswith('Convergent') else -1)
     st.header('Camera · simplified angular gate')
     acceptance=st.slider('Acceptance half-angle (°)',2.,80.,35.,1.)
+    st.header('Direct illumination rejection')
+    path_mode=st.selectbox('Detector photon-history filter',
+                           ('Traversed egg','Traversed interior','All exits'),
+                           help='MCX path-history diagnostic, NOT a real camera baffle. '
+                                'Traversed egg accepts paths through shell or interior; '
+                                'Traversed interior rejects shell-only and air-only rays. '
+                                'All exits shows unfiltered top-face detector photons.')
+    min_path=st.slider('Minimum path inside selected egg region (mm)',0.,10.,0.,.1,
+                       disabled=(path_mode=='All exits'),
+                       help='Reject grazing paths shorter than the selected threshold. '
+                            'At 0 mm any positive MCX-recorded tissue path qualifies. '
+                            'Increasing this threshold can hide real egg rim signal.')
+    st.caption('This is an idealized history filter available only because MCX tracks the photons. '
+               'A physical camera cannot identify egg-traversing rays from their histories; '
+               'use baffles, controlled source geometry and camera aperture/NA to suppress stray light.')
     slit=st.slider('Observation slit width (mm) — pushbroom only',.5,12.,4.,.5,disabled=camera_mode=='Area')
     st.header('MCX simulation')
     voxel=st.select_slider('Voxel size (mm)',[.2,.25,.35,.5,.75,1.,1.5,2.],value=.5)
@@ -80,10 +95,19 @@ g=Geometry(egg_width_mm=egg_w,egg_length_mm=egg_l,egg_height_mm=egg_h,shell_thic
 o=Optics(mode=mode,camera_mode=camera_mode,line_length_mm=length,line_width_mm=width,spot_diameter_mm=diameter,
          source_offset_y_mm=offset,source_gap_mm=gap,beam_focal_length_mm=focal,
          camera_half_angle_deg=acceptance,camera_line_width_mm=slit,
+         camera_path_mode=path_mode,min_egg_path_mm=min_path,
          voxel_mm=voxel,domain_padding_mm=padding,domain_build_budget_mib=host_budget,
          photons_per_line=packets,scan_lines=nlines,camera_pixels=npixels,area_rows=area_rows,
          gpu_id=gpu,seed=seed)
 
+if mode=='Transverse line' and length < egg_w+6:
+    st.warning(f'Transverse line length is {length:.0f} mm vs egg width {egg_w:.0f} mm. '
+               'For full lateral illumination, try a 55–60 mm line and compare source coverage, '
+               'camera signal, and MCX padding convergence. A wider source does NOT reject bypass rays.')
+if mode=='Spot' and camera_mode=='Pushbroom' and diameter < egg_w:
+    st.info(f'Only a {diameter:.0f} mm-wide lateral swath is directly illuminated by the spot, '
+            f'versus a {egg_w:.0f} mm-wide egg. A finished pushbroom image will not necessarily '
+            'reveal the full egg sides. Consider a transverse line for full-width coverage.')
 st.subheader('Apparatus geometry and selected source')
 st.plotly_chart(apparatus_figure(g,o),use_container_width=True)
 if camera_mode=='Pushbroom':
@@ -281,6 +305,20 @@ if 'result' in st.session_state:
         show_source=show_source,scan_y_mm=selected_y,
         title='MCX detected transmission + optional geometry overlays')
     st.plotly_chart(output_figure,use_container_width=True)
+    if 'image_unfiltered' in r and run_o.camera_path_mode != 'All exits':
+        with st.expander('Compare detected light BEFORE and AFTER direct-path filtering'):
+            st.caption('Both plots use the same MCX photon exits and a shared linear colour scale. '
+                       'This is an idealized path-history selection, not a simulated optical baffle.')
+            raw=r['image_unfiltered']
+            shared_max=max(float(np.max(raw)),float(np.max(image)),1e-12)
+            cc1,cc2=st.columns(2)
+            cc1.plotly_chart(image_plot(raw,x,y,'All top-face photon exits',recorded_mode,zmax=shared_max),use_container_width=True)
+            cc2.plotly_chart(image_plot(image,x,y,'Egg-path-filtered photons',recorded_mode,zmax=shared_max),use_container_width=True)
+            rr=r['diagnostics']
+            st.caption(f'Excluded from the camera: {rr.get("camera_rejected_bypass_packets",0):,} '
+                       'photons, representing '
+                       f'{100*rr.get("camera_rejected_bypass_weight",0)/max(rr.get("weighted_camera_signal_unfiltered",0),1e-15):.1f}% '
+                       'of weighted raw detector signal.')
     if show_egg or show_yolk or show_source:
         st.caption('Dashed outlines are geometric information added AFTER the MCX simulation: '
                    'egg/yolk = orthographic model silhouettes; illumination = source LAUNCH footprint '
@@ -320,6 +358,11 @@ if 'result' in st.session_state:
     a.metric('Photons launched',f'{d["launched_photons"]:,}')
     b.metric('Detected at upper MCX face',f'{d["top_exit_photons"]:,}')
     c.metric('Accepted by model camera',f'{d["camera_accepted_photons"]:,}')
+    if 'camera_rejected_bypass_packets' in d:
+        st.caption(f'History gate: **{d["camera_path_mode"]}** · '
+                   f'excluded {d["camera_rejected_bypass_packets"]:,} camera-eligible photons '
+                   'because their MCX material paths did not meet the selected rule. '
+                   'Rejecting bypass photons computationally is not equivalent to placing a real baffle.')
     if d['camera_accepted_photons'] < 500:
         st.warning('Few accepted photons. Interpretation is Monte Carlo-noise dominated; increase the photon budget or camera acceptance.')
     if st.session_state.get('compared'):
@@ -337,7 +380,8 @@ if 'result' in st.session_state:
               'optics':r['optics'],'geometry':r['geometry'],'materials':r['materials'].tolist(),
               'diagnostics':r['diagnostics']}
     buff=io.BytesIO()
-    np.savez_compressed(buff,image=image,x_mm=x,y_mm=y,scan_y_mm=y,metadata=json.dumps(metadata))
+    np.savez_compressed(buff,image=image,image_unfiltered=r.get('image_unfiltered',image),
+                        x_mm=x,y_mm=y,scan_y_mm=y,metadata=json.dumps(metadata))
     st.download_button('Download raw signal (.npz)',buff.getvalue(),'mcx_egg_scan.npz')
     st.download_button('Download run metadata (.json)',json.dumps(metadata,indent=2),'mcx_egg_config.json')
 else:
