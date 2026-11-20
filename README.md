@@ -1,4 +1,4 @@
-# Egg transmission simulator — v0.5.1 (MCX)
+# Egg transmission simulator — v0.6 (MCX)
 
 **Python · Streamlit · validated MCX photon-transport engine through `pmcx` · pushbroom line-scan **or stationary 2D area camera**
 
@@ -54,6 +54,18 @@ python -m eggtrans.cli --camera Area --mode Spot --photons 1000000 --area-rows 9
 python -m eggtrans.cli --camera Area --mode "Transverse line" --photons 1000000 --area-rows 96 --pixels 96 --output results/area_line
 python -m eggtrans.cli --camera Pushbroom --mode Spot --photons 100000 --lines 48 --output results/scan_spot
 ```
+
+## Camera readout consistency check
+
+The ordinary pushbroom and area experiments are *not* directly comparable when illumination is spatially localized. In pushbroom mode, a fixed source and camera slit move relative to the egg. A spot makes a line-like strip across the completed scan; a stationary area camera captures a local spot. Broad backlighting may produce more similar images when the illuminated area covers the full translation range and the camera sampling/throughput are matched.
+
+The Streamlit expander **Diagnostic: compare detector readouts with identical photons** runs **one** MCX simulation with a fixed scene and then bins the *identical exiting photons* using both an area detector and a virtual line detector with one area-row-width slit. The resulting 2D images should agree. This tests readout binning but does **not** test moving geometry or validate the MCX physics engine.
+
+## Voxel size and the 0.35 mm eggshell
+
+Standard MCX label volumes use a **uniform isotropic grid**: the same voxel size applies to the egg interior, thin shell, and air. The Streamlit selector offers **0.35 mm** in addition to 0.5–2 mm, but 0.35 mm represents only one nominal voxel across the shell and remains geometrically crude. For the default source and egg geometry this is approximately **10.2 million voxels** at 0.35 mm; the current simulator rejects label volumes larger than **12 million voxels**. Refining to 0.1 mm without changing grid strategy would expand the volume by about 43 times relative to 0.35 mm and exceed this safety bound.
+
+Established sub-voxel/mesh alternatives: [MCX split-voxel SVMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC7687934/) for curved interfaces and [MMC](https://github.com/fangq/mmc) with tetrahedral meshes. Neither is connected to this project yet; do not claim locally adaptive voxels in standard MCX. A shell thinner than a coarse voxel may contain both surfaces in a single voxel, which is problematic even for simple split-voxel representations.
 
 ## Source geometries: important spot/line distinction
 
@@ -137,6 +149,7 @@ Provide **Shell**, **Albumen**, **Yolk**, **Blood spot** rows for each wavelengt
 - `eggtrans/core.py`: egg geometry, shared dataclasses, and public entry point only (**no custom photon transport**)
 - `eggtrans/mcx_engine.py`: PMCX configuration, voxel-label setup, photo exit-face readout, known-answer phantoms
 - `eggtrans/schematic.py`: interactive top/side views tied to MCX source parameters
+- `eggtrans/readout_validation.py`: MCX photon-exit detector equivalence check, without custom optical transport
 - `eggtrans/verify_physics.py`: execute the reference phantoms using real MCX
 - `eggtrans/spectra.py`: measured spectral CSV support
 - `eggtrans/cli.py`: batch run using same MCX entry point
