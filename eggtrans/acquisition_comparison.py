@@ -11,7 +11,7 @@ import numpy as np
 
 from .core import Geometry, Optics, MATERIALS_800
 from .mcx_engine import (backend_status, build_egg_volume, camera_bin,
-                         camera_bin_area, mcx_config, top_face_photons)
+                         camera_bin_area, mcx_config, top_face_photons, photon_history_mask)
 
 
 def compare_matched_acquisitions(
@@ -56,7 +56,10 @@ def compare_matched_acquisitions(
         result=backend.mcxlab(cfg)
         if not isinstance(result,dict) or 'detp' not in result:
             raise RuntimeError('MCX returned no detp; verify exit-face detection.')
-        return top_face_photons(result['detp'],domain.props,backend)
+        p,v,w=top_face_photons(result['detp'],domain.props,backend,unitinmm=domain.grid_mm)
+        keep=photon_history_mask(result['detp'],len(p),o,domain.grid_mm,
+                                 n_materials=domain.props.shape[0]-1)
+        return p[keep],v[keep],w[keep]
 
     p,v,w = exits(max(1,int(o.seed)))
     area, n_area = camera_bin_area(p,v,w,domain,o,y_edges,x_edges)
