@@ -18,6 +18,14 @@ python -c "import pmcx; print(pmcx.gpuinfo())"
 python -m streamlit run app.py
 ```
 
+**Package version:** PMCX uses `0.x` releases; this project supports `pmcx>=0.8.1,<0.9`. PyPI provides a Windows CPython 3.11 wheel for version 0.8.1. If an older checkout fails with `pmcx>=2025.10`, run `git pull` and reinstall.
+
+```powershell
+python -c "import importlib.metadata as m; import pmcx; print('PMCX', m.version('pmcx')); print('mcxlab:', callable(pmcx.mcxlab)); print('detweight:', callable(pmcx.detweight))"
+```
+
+Importing PMCX does not prove the GPU transport works; verify with `python -m eggtrans.verify_physics`.
+
 **PMCX needs a compatible NVIDIA CUDA GPU** for its standard binary backend; NVIDIA drivers must be installed. The pip wheel typically includes the CUDA runtime, so a full CUDA toolkit is normally unnecessary. Without an operational MCX backend, the application can show its geometry schematic but **will not silently switch to a home-built ray tracer**. For Intel/AMD/OpenCL machines, MCX-CL/`pmcxcl` may be suitable as an additional future backend, but it is not wired or verified in this version.
 
 ## Source geometries: important spot/line distinction
