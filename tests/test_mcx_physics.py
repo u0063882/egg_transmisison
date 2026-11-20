@@ -47,3 +47,22 @@ def test_mcx_area_camera_preserves_known_spot_vs_line_footprint():
     assert .85 < r['Spot']['aspect_x_over_y'] < 1.15, r
     assert r['Transverse line']['aspect_x_over_y'] > 10., r
     assert all(v['weighted_flux']>.95 for v in r.values()), r
+
+@pytest.mark.gpu
+def test_mcx_rejects_real_air_bypass_photons_when_egg_present():
+    """GPU test: direct air paths are present with broad illumination and excluded by history gate."""
+    if os.environ.get('RUN_MCX_PHYSICS') != '1':
+        pytest.skip('Requires explicit RUN_MCX_PHYSICS=1 and NVIDIA GPU.')
+    ready,message=backend_status()
+    if not ready:
+        pytest.skip(message)
+    from eggtrans.core import Geometry, Optics, MATERIALS_800
+    from eggtrans.mcx_engine import simulate_mcx
+    o=Optics(camera_mode='Area',mode='Broad backlight',line_length_mm=68.,
+             voxel_mm=1.,photons_per_line=100000,camera_pixels=24,area_rows=24,
+             camera_path_mode='Traversed egg',camera_half_angle_deg=60.)
+    out=simulate_mcx(Geometry(include_yolk=False,include_blood=False),o,MATERIALS_800)
+    diag=out['diagnostics']
+    assert np.sum(out['image_unfiltered']) >= np.sum(out['image'])
+    assert diag['camera_rejected_bypass_packets'] > 0
+    assert diag['camera_accepted_photons'] > 0
