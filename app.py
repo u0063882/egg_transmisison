@@ -9,11 +9,12 @@ import streamlit as st
 from eggtrans.core import Geometry,Optics,MATERIALS_800,MATERIAL_NAMES,MODE_NAMES,CAMERA_MODES,simulate,projected_masks
 from eggtrans.mcx_engine import backend_status,build_egg_volume,source_config,source_footprint_mm
 from eggtrans.schematic import apparatus_figure
+from eggtrans.readout_validation import compare_fixed_scene_readouts
 from eggtrans.spectra import load_spectra_csv,at_wavelength
 
 st.set_page_config(page_title='Egg transmission · MCX',layout='wide',page_icon='🥚')
 st.title('Egg transmission · MCX / PMCX')
-st.caption('App v0.5.1 · MCX photon transport · camera selection is on this main page')
+st.caption('App v0.6.0 · MCX photon transport · camera selection is on this main page')
 st.subheader('Camera / acquisition')
 camera_mode=st.radio(
     'Camera type',
@@ -43,7 +44,7 @@ with st.sidebar:
     acceptance=st.slider('Acceptance half-angle (°)',2.,80.,35.,1.)
     slit=st.slider('Observation slit width (mm) — pushbroom only',.5,12.,4.,.5,disabled=camera_mode=='Area')
     st.header('MCX simulation')
-    voxel=st.select_slider('Voxel size (mm)',[.5,.75,1.,1.5,2.],value=.5)
+    voxel=st.select_slider('Voxel size (mm)',[.35,.5,.75,1.,1.5,2.],value=.5)
     packets=st.select_slider('Photons per MCX run / area exposure',[10_000,30_000,100_000,300_000,1_000_000],value=100_000)
     nlines=st.select_slider('Pushbroom scan lines',[12,24,48,96],value=24,disabled=camera_mode=='Area')
     npixels=st.select_slider('Pixels in x',[32,64,96,128],value=64)
@@ -98,8 +99,11 @@ if status:
     st.success(msg)
 else:
     st.warning(msg+' Geometry preview still works, but simulation requires PMCX on a supported GPU.')
-if voxel>shell:
-    st.warning('Voxel size exceeds shell thickness. The shell will be only approximately represented and may have missing sections. Try a finer voxel grid.')
+st.caption(f'Shell / voxel size = **{shell/voxel:.2f}**. Standard MCX uses one isotropic voxel size throughout the domain; the current simulator limits label volumes to 12 million voxels.')
+if voxel >= shell:
+    st.warning('Voxel size is at least as large as the 0.35 mm default shell: severe boundary aliasing is possible, including missing shell voxels. Use finer voxels or a mesh/split-voxel solver.')
+elif shell/voxel < 3:
+    st.warning('Less than three nominal voxels span the shell. Curved surface and inner/outer boundary accuracy remain limited.')
 
 st.subheader('Spectral optical properties')
 wcol,ccol=st.columns([1,2])
@@ -157,6 +161,38 @@ def image_plot(image,x,y,name,camera_mode='Pushbroom'):
                     height=500,margin=dict(l=45,r=30,t=50,b=35))
     f.update_yaxes(scaleanchor='x',scaleratio=1)
     return f
+
+with st.expander('Diagnostic: compare detector readouts with identical photons', expanded=False):
+    st.markdown('''**Why the images can differ:** the ordinary pushbroom experiment
+    moves the source/camera relative to the egg, whereas the area mode records
+    a single fixed illumination footprint. With a spot, the two images are
+    **not** expected to look alike. A wider pushbroom slit also differs from
+    a narrow area-camera pixel row.
+
+    This diagnostic instead uses **one MCX run**, holds the egg and source fixed,
+    and bins the *same exiting photons* twice: into 2D pixels and into an
+    equivalent sequence of row-wide virtual slit measurements. The row slit
+    width is set to exactly one area-camera pixel pitch. Agreement checks the
+    readout implementation but is **not a validation of egg motion or MCX physics**.
+    ''')
+    check = st.button('Run fixed-scene detector equivalence check', disabled=not status)
+    if check:
+        try:
+            with st.spinner('Running one MCX exposure and comparing both detector readouts…'):
+                diagnostic = compare_fixed_scene_readouts(g, o, material)
+        except Exception as exc:
+            st.error(f'Fixed-scene readout check failed: {exc}')
+        else:
+            aa, bb = st.columns(2)
+            aa.plotly_chart(image_plot(diagnostic['area_image'], diagnostic['x_mm'],
+                                      diagnostic['y_mm'], 'Area camera · same MCX photons', 'Area'),
+                            use_container_width=True)
+            bb.plotly_chart(image_plot(diagnostic['line_readout_image'], diagnostic['x_mm'],
+                                      diagnostic['y_mm'], 'Equivalent virtual line readout', 'Area'),
+                            use_container_width=True)
+            st.metric('Relative image discrepancy',
+                      f"{diagnostic['diagnostics']['relative_l1_difference']:.3g}")
+            st.caption('This is a stationary-source detector consistency check, not a moving-egg pushbroom reconstruction. Both images must agree apart from numerical boundary cases.')
 
 if 'result' in st.session_state:
     r=st.session_state['result']
