@@ -246,7 +246,7 @@ def backend_status()->tuple[bool,str]:
     return True,'PMCX initialized successfully (CUDA GPU present).'
 
 
-def top_face_photons(detp:dict, prop:np.ndarray, pmcx_module) -> tuple[np.ndarray,np.ndarray,np.ndarray]:
+def top_face_photons(detp:dict, prop:np.ndarray, pmcx_module, *, unitinmm: float | None = None) -> tuple[np.ndarray,np.ndarray,np.ndarray]:
     """Decode MCX-returned exit positions/directions and physical weights.
 
     MCX `detp['p']` and `detp['v']` are *exit* (not source) values. `detweight`
@@ -269,10 +269,44 @@ def top_face_photons(detp:dict, prop:np.ndarray, pmcx_module) -> tuple[np.ndarra
         v=v.T
     if p.shape[1]!=3 or v.shape!=p.shape:
         raise ValueError('PMCX exit positions/directions must have shape (N,3).')
-    w=np.asarray(pmcx_module.detweight(detp,prop),dtype=float).reshape(-1)
+    # MCX records material path lengths in voxel units; explicitly apply
+    # voxel-to-mm conversion when reconstructing detected photon weights.
+    if unitinmm is None:
+        w=np.asarray(pmcx_module.detweight(detp,prop),dtype=float).reshape(-1)
+    else:
+        w=np.asarray(pmcx_module.detweight(detp,prop,unitinmm=float(unitinmm)),dtype=float).reshape(-1)
     if len(w)!=len(p):
         raise ValueError('PMCX weight count does not match exit photons.')
     return p,v,w
+
+
+
+def photon_history_mask(detp: dict, n_photons: int, o: Optics, voxel_mm: float,
+                        n_materials: int = 5) -> np.ndarray:
+    """Diagnostic only: select detected photons by MCX-recorded material path.
+
+    MCX ppath columns: 0 air, 1 shell, 2 albumen, 3 yolk, 4 blood.
+    Path lengths are in voxel units and must be multiplied by voxel_mm.
+    This ideal history gate does not simulate a physical optical baffle.
+    """
+    if n_photons == 0:
+        return np.zeros(0, dtype=bool)
+    if o.camera_path_mode == 'All exits':
+        return np.ones(n_photons, dtype=bool)
+    if not isinstance(detp, dict) or 'ppath' not in detp:
+        raise RuntimeError('MCX detector photon histories missing `ppath`. '
+                           'The camera path filter requires savedetflag="DPXV" and '
+                           'a PMCX partial-path output. Select All exits only for debugging.')
+    path=np.asarray(detp['ppath'],dtype=float)
+    if path.ndim != 2 or path.shape != (n_photons, n_materials):
+        raise RuntimeError(f'Unexpected MCX ppath dimensions {path.shape}; '
+                           f'expected ({n_photons}, {n_materials}) for '
+                           'air/shell/albumen/yolk/blood materials.')
+    if not np.isfinite(path).all() or np.any(path < 0):
+        raise RuntimeError('MCX reported invalid partial path lengths.')
+    first=1 if o.camera_path_mode == 'Traversed egg' else 2
+    tissue_path_mm=np.sum(path[:,first:],axis=1)*float(voxel_mm)
+    return tissue_path_mm>float(o.min_egg_path_mm)
 
 
 def camera_bin(p:np.ndarray,v:np.ndarray,weights:np.ndarray,domain:VoxelDomain,
@@ -351,7 +385,10 @@ def simulate_mcx(g: Geometry, o: Optics, materials: np.ndarray, run_backend=None
 
     exit_total = 0
     capture_total = 0
+    capture_raw_total = 0
     captured_weight = 0.
+    captured_raw_weight = 0.
+    unfiltered = np.zeros_like(image)
     for i, sy in enumerate(positions):
         cfg = mcx_config(domain, o, float(sy), max(1, (int(o.seed)+i) % 2147483647))
         try:
@@ -361,22 +398,37 @@ def simulate_mcx(g: Geometry, o: Optics, materials: np.ndarray, run_backend=None
         detp = result.get('detp') if isinstance(result, dict) else None
         if detp is None:
             raise RuntimeError('MCX returned no detected photon dictionary; check +z face detection.')
-        p, v, w = top_face_photons(detp, domain.props, run_backend)
+        p, v, w = top_face_photons(detp, domain.props, run_backend,
+                                   unitinmm=domain.grid_mm)
+        history_ok=photon_history_mask(detp,len(p),o,domain.grid_mm,
+                                       n_materials=domain.props.shape[0]-1)
         if area:
-            image, n_camera = camera_bin_area(p, v, w, domain, o, y_edges, x_edges)
-            captured_weight += float(image.sum())
+            raw, n_raw = camera_bin_area(p, v, w, domain, o, y_edges, x_edges)
+            gated, n_camera = camera_bin_area(p[history_ok], v[history_ok],
+                                               w[history_ok], domain, o, y_edges, x_edges)
+            unfiltered[:,:] = raw
+            image[:,:] = gated
+            captured_weight += float(gated.sum())
+            captured_raw_weight += float(raw.sum())
         else:
-            line, n_camera = camera_bin(p, v, w, domain, o, float(sy), x_edges)
-            image[i, :] = line
-            captured_weight += float(line.sum())
+            raw, n_raw = camera_bin(p, v, w, domain, o, float(sy), x_edges)
+            gated, n_camera = camera_bin(p[history_ok], v[history_ok],
+                                          w[history_ok], domain, o, float(sy), x_edges)
+            unfiltered[i,:] = raw
+            image[i,:] = gated
+            captured_weight += float(gated.sum())
+            captured_raw_weight += float(raw.sum())
         exit_total += len(p)
         capture_total += n_camera
+        capture_raw_total += n_raw
 
     # Same intensity convention as the line scan: each row/exposure is
     # weighted photon energy per launched packet, NOT radiant power per area.
     image /= float(o.photons_per_line)
+    unfiltered /= float(o.photons_per_line)
     launched = int(o.photons_per_line * len(positions))
-    return {'image': image, 'x_mm': x_mm, 'y_mm': y_mm,
+    return {'image': image, 'image_unfiltered': unfiltered,
+            'x_mm': x_mm, 'y_mm': y_mm,
             'scan_y_mm': y_mm,  # backwards-compatible key for saved data
             'camera_mode': o.camera_mode,
             'geometry': asdict(g), 'optics': asdict(o), 'materials': materials.copy(),
@@ -385,6 +437,12 @@ def simulate_mcx(g: Geometry, o: Optics, materials: np.ndarray, run_backend=None
                             'launched_photons': launched,
                             'top_exit_photons': exit_total, 'camera_accepted_photons': capture_total,
                             'weighted_camera_signal': captured_weight,
+                            'weighted_camera_signal_unfiltered': captured_raw_weight,
+                            'camera_accepted_before_history_gate': capture_raw_total,
+                            'camera_rejected_bypass_packets': capture_raw_total-capture_total,
+                            'camera_rejected_bypass_weight': captured_raw_weight-captured_weight,
+                            'camera_path_mode': o.camera_path_mode,
+                            'min_egg_path_mm': o.min_egg_path_mm,
                             'fraction_collected': captured_weight / launched,
                             'voxel_size_mm': domain.grid_mm, 'volume_shape': domain.dims,
                             'source_type': source_config(domain, o, 0)['srctype'],
