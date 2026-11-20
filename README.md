@@ -1,6 +1,6 @@
-# Egg transmission simulator — v0.7 (MCX)
+# Egg transmission simulator — v0.8 (MCX)
 
-**Python · Streamlit · validated MCX photon-transport engine through `pmcx` · pushbroom line-scan **or stationary 2D area camera**
+**Python · Streamlit · MCX photon transport through `pmcx` · pushbroom line-scan or stationary 2D area camera**
 
 This project investigates whether a transmitted-light hyperspectral camera can recover spatial structures (e.g. yolk boundary, synthetic blood inclusion) in a moving egg. The project now uses **MCX/PMCX exclusively for the Monte Carlo photon transport**. The previous self-written Monte Carlo kernel was removed from the active simulation path.
 
@@ -24,8 +24,8 @@ python -m streamlit run app.py
 
 ## Camera modes
 
-The Streamlit **main page**, immediately below its title, now offers **Camera type: Pushbroom (line scan)** or
-**Normal camera (2D area)**. It shows **App v0.5.1** at the top to identify a fresh checkout. The sidebar retains the illumination controls. Both rely exclusively on the established MCX
+The Streamlit main page offers **Camera type: Pushbroom (line scan)** or
+**Normal camera (2D area)**. Both rely exclusively on the established MCX
 photon transport engine through PMCX; only the detector readout and source
 movement differ.
 
@@ -54,6 +54,42 @@ python -m eggtrans.cli --camera Area --mode Spot --photons 1000000 --area-rows 9
 python -m eggtrans.cli --camera Area --mode "Transverse line" --photons 1000000 --area-rows 96 --pixels 96 --output results/area_line
 python -m eggtrans.cli --camera Pushbroom --mode Spot --photons 100000 --lines 48 --output results/scan_spot
 ```
+
+## v0.8: source-specific MCX domain and controlled camera comparison
+
+### Fix for "MCX voxel domain too large"
+
+The previous implementation allocated an axis-aligned air-filled simulation box using **the maximum of all possible source dimensions**, even those disabled by the chosen illumination setting. It also imposed an arbitrary 12-million-voxel limit. Consequently, a 2D spot at a long (inactive) line-length setting and the same source in pushbroom mode could require unnecessarily large boxes.
+
+Now `eggtrans.mcx_engine.domain_plan()` sizes the volume from the **actual selected MCX source footprint**, the egg silhouette and camera field of view. In pushbroom mode it contains the union of source positions over all scan lines. A user-controlled **lateral air padding** surrounds this union so scattered photons have room to travel before escaping at the artificial side walls. The z clearance has not been changed. No change is made to the voxel resolution automatically. Standard MCX continues to handle all photon transport.
+
+For the default 44 × 59 × 44 mm egg, 60 mm transverse illumination, 0.35 mm voxels and 8 mm padding:
+
+| Scenario | Old grid voxels | New grid voxels |
+|---|---:|---:|
+| Transverse line, pushbroom | approximately 12.84 million | **7.53 million** |
+| Spot, pushbroom (inactive line length=60 mm) | approximately 12.84 million | **6.60 million** |
+| Spot, stationary 2D area camera | approximately 7.64 million | **6.14 million** |
+
+These are **calculated grid geometries, not measured optical predictions**. The old limit was project-specific, not an MCX hard limit. The new preflight checks an adjustable **rough Python host-rasterization memory budget** (default 512 MiB, using 16 bytes per voxel to estimate peak mask/temporary working memory). The actual uint8 labels use about **one byte per voxel**; GPU working memory and per-photon exit records are additional, implementation- and hardware-dependent. Preflight uses only geometry and does not allocate the full volume on each Streamlit widget refresh.
+
+**Important: shrinking the artificial box can affect MCX transport.** Scattered photons that escape a side boundary will not return. The 8 mm default is a starting point, *not* a verified optimal padding value. In Streamlit inspect the padding-cost table and run an actual GPU convergence study before trusting spatial contrast or total throughput:
+
+```powershell
+# No GPU required: exact box dimensions and memory estimates
+python scripts/run_domain_convergence.py --dry-run --camera Pushbroom --mode "Transverse line" --voxel 0.35 --line-length 60 --padding 6 8 12 16
+
+# Requires working PMCX/CUDA: real MCX simulations, at fixed 0.5-mm voxels
+python scripts/run_domain_convergence.py --camera Area --mode "Transverse line" --voxel 0.5 --padding 8 12 16 --photons 300000 --output reports/padding_convergence.json
+```
+
+The results JSON includes integrated weighted signal and image-level differences relative to the largest box. **Monte Carlo noise can dominate these differences**, so repeat at higher photon budgets and multiple seeds if results are ambiguous. A small image difference at a single photon budget is *not* proof of convergence. Refining the uniform grid also does not make a 0.35-mm eggshell accurate until adequate resolution is established; split-voxel MCX or MMC are longer-term options.
+
+### Matched camera comparison
+
+The usual pushbroom and area-camera outputs are *different experiments* for spot/line illumination, so they need not look alike. A new Streamlit expander, **Diagnostic: matched broad-illumination acquisition**, runs an explicit **controlled, stationary-egg comparison**: one area image versus separate virtual camera rows, **both under a fixed broad light field relative to the egg** with matched row pitch, camera acceptance and source parameters. One MCX run is used for the area image and one additional MCX run per virtual row. Images are normalized **per launched photon packet in each run**. With sufficient detected photons they should agree statistically.
+
+This controlled test does **not** reproduce an egg physically translated beneath a narrow lab-fixed source. It is complementary to **Diagnostic: compare detector readouts with identical photons**, which bins the exact same exiting photons into both detector representations and should agree almost exactly. Neither diagnostic substitutes for physical validation of moving-eggs or a matched measurement of actual source irradiance.
 
 ## Camera result overlays and interactive 3D projection
 
@@ -164,6 +200,8 @@ Provide **Shell**, **Albumen**, **Yolk**, **Blood spot** rows for each wavelengt
 - `eggtrans/mcx_engine.py`: PMCX configuration, voxel-label setup, photo exit-face readout, known-answer phantoms
 - `eggtrans/schematic.py`: interactive top/side views tied to MCX source parameters
 - `eggtrans/readout_validation.py`: MCX photon-exit detector equivalence check, without custom optical transport
+- `eggtrans/acquisition_comparison.py`: controlled broad-source comparison (one MCX run per camera exposure/virtual row)
+- `scripts/run_domain_convergence.py`: voxel-domain preflight and optional real MCX padding-convergence runs
 - `eggtrans/visualization.py`: 2D image overlays and conceptual interactive 3D plot, without any photon transport
 - `eggtrans/verify_physics.py`: execute the reference phantoms using real MCX
 - `eggtrans/spectra.py`: measured spectral CSV support
