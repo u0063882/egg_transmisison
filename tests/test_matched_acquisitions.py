@@ -19,9 +19,9 @@ class FixedPackets:
                            Y.ravel()/cfg['unitinmm']+ny/2,
                            np.ones(X.size)*(nz-.5)])
         v=np.tile([0.,0.,1.],(len(p),1))
-        return {'detp':{'p':p,'v':v}}
+        return {'detp':{'p':p,'v':v,'ppath':np.tile([0.,.5,2.,0.,0.],(len(p),1))}}
     @staticmethod
-    def detweight(d,props):
+    def detweight(d,props,unitinmm=None):
         return np.ones(len(d['p']))
 
 
